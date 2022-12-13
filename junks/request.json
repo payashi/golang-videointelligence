@@ -1,0 +1,13 @@
+{
+    "inputUri": "gs://gcs-video-tracking/sample.mp4",
+    "features": [
+        "PERSON_DETECTION"
+    ],
+    "videoContext": {
+        "personDetectionConfig": {
+            "includeBoundingBoxes": true,
+            "includePoseLandmarks": true,
+            "includeAttributes": true
+        }
+    }
+}
