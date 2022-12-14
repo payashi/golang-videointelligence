@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"math"
+	"math/rand"
 
 	"gonum.org/v1/gonum/mat"
 )
@@ -23,38 +24,32 @@ func Regress(tj1 Trajectory, tj2 Trajectory) {
 		p1, q1 := tr1.XY(i)
 		p2, q2 := tr2.XY(i)
 		model.data[i] = Snapshot{
-			p1 - tj1.Width/2,
-			p2 - tj2.Width/2,
-			q1 - tj1.Height/2,
-			q2 - tj2.Height/2,
+			p1/tj1.Width - 0.5,
+			p2/tj2.Width - 0.5,
+			(q1/tj1.Height - 0.5) * (tj1.Height / tj1.Width),
+			(q2/tj2.Height - 0.5) * (tj2.Height / tj2.Width),
 		}
+		// model.data[i] = Snapshot{
+		// 	p1 - tj1.Width/2,
+		// 	p2 - tj2.Width/2,
+		// 	q1 - tj1.Height/2,
+		// 	q2 - tj2.Height/2,
+		// }
 	}
 	model.c1 = mat.NewVecDense(3, []float64{0, 0, 0})
 	model.c2 = mat.NewVecDense(3, []float64{0, 1, 0})
 	model.params = mat.NewVecDense(6, []float64{
-		0, 0, // theta
-		// rand.Float64() * math.Pi, -rand.Float64() * math.Pi, // phi
-		0, 0,
-		1, 1, // k
+		-0.1, -0.1, // theta
+		rand.Float64() * math.Pi, -rand.Float64() * math.Pi, // phi
+		// 0.7 * math.Pi, 1.2 * math.Pi,
+		10, 10,
 	})
 	model.nparams = model.params.Len()
+	// model.NaiveGradientDecent(1e-2, 1e-1, 10000)
+	// model.BatchGradientDecent(1e-2, 1e-1, 10000)
+	// loss := model.GetMinL(*mat.NewVecDense(4, []float64{1, 1, 1, -2})) // theta1, theta2, p1, p2
+	// fmt.Printf("loss: %.3f\n", loss)
 
-	dp := 1e-2
-	mu := 1.
-	for i := 0; i < 100; i++ {
-		// fmt.Printf("loss: %.3f\n", model.GetLoss(*model.params))
-
-		inc := mat.NewVecDense(model.nparams, nil)
-		for i := 0; i < model.nparams; i++ {
-			inc.SetVec(i, -model.GetDiff(i, dp))
-		}
-		inc.ScaleVec(1/inc.Norm(2), inc)
-		model.params.AddScaledVec(model.params, mu, inc)
-	}
-	fmt.Printf("final loss: %.3f\n", model.GetLoss(*model.params))
-	fmt.Printf("theta1: %.2f pi, theta2: %.2f pi\n", model.params.At(0, 0)/math.Pi, model.params.At(1, 0)/math.Pi)
-	fmt.Printf("phi1: %.2f pi, phi2: %.2f pi\n", model.params.At(2, 0)/math.Pi, model.params.At(3, 0)/math.Pi)
-	fmt.Printf("k1: %.2f, k2: %.2f\n", model.params.At(4, 0), model.params.At(5, 0))
 }
 
 type Snapshot struct {
@@ -66,6 +61,47 @@ type Model struct {
 	params         *mat.VecDense
 	data           []Snapshot
 	c1, c2         *mat.VecDense
+}
+
+func (model Model) PrintParams() {
+	fmt.Printf("loss: %.5f\t", model.GetLoss(*model.params))
+	fmt.Printf("theta1: %.2f pi, theta2: %.2f pi\t",
+		model.params.At(0, 0)/math.Pi,
+		model.params.At(1, 0)/math.Pi,
+	)
+	fmt.Printf("phi1: %.2f pi, phi2: %.2f pi\t",
+		model.params.At(2, 0)/math.Pi,
+		model.params.At(3, 0)/math.Pi,
+	)
+	fmt.Printf("k1: %.2f, k2: %.2f\n",
+		model.params.At(4, 0),
+		model.params.At(5, 0),
+	)
+}
+
+func (model *Model) NaiveGradientDecent(dp, mu float64, ntrials int) {
+	for i := 0; i < ntrials; i++ {
+		model.PrintParams()
+		for j := 0; j < model.nparams; j++ {
+			for k := 0; k < 100; k++ {
+				inc := mat.NewVecDense(model.nparams, nil)
+				inc.SetVec(j, -mu*model.GetDiff(j, dp))
+				model.params.AddVec(model.params, inc)
+			}
+		}
+	}
+}
+
+func (model *Model) BatchGradientDecent(dp, mu float64, ntrials int) {
+	for i := 0; i < ntrials; i++ {
+		model.PrintParams()
+		inc := mat.NewVecDense(model.nparams, nil)
+		for j := 0; j < model.nparams; j++ {
+			inc.SetVec(j, -model.GetDiff(j, dp))
+		}
+		inc.ScaleVec(1/inc.Norm(2), inc)
+		model.params.AddScaledVec(model.params, mu, inc)
+	}
 }
 
 func (model *Model) GetDiff(i int, dp float64) float64 {
@@ -88,18 +124,18 @@ func (model *Model) GetLoss(params mat.VecDense) float64 {
 		math.Sin(theta1),
 	})
 	n2 := mat.NewVecDense(3, []float64{
-		math.Cos(phi1) * math.Cos(theta1),
-		math.Sin(phi1) * math.Cos(theta1),
-		math.Sin(theta1),
+		math.Cos(phi2) * math.Cos(theta2),
+		math.Sin(phi2) * math.Cos(theta2),
+		math.Sin(theta2),
 	})
 	a1 := mat.NewVecDense(3, []float64{
 		-math.Sin(phi1),
-		-math.Cos(phi1),
+		math.Cos(phi1),
 		0,
 	})
 	a2 := mat.NewVecDense(3, []float64{
 		-math.Sin(phi2),
-		-math.Cos(phi2),
+		math.Cos(phi2),
 		0,
 	})
 	b1 := mat.NewVecDense(3, []float64{
@@ -128,14 +164,14 @@ func (model *Model) GetLoss(params mat.VecDense) float64 {
 		d2.AddScaledVec(n2, k2, d2)
 
 		mata := mat.NewDense(2, 2, []float64{
-			2 * mat.Dot(d1, d1), -2 * mat.Dot(d1, d2),
-			-2 * mat.Dot(d1, d2), 2 * mat.Dot(d2, d2),
+			mat.Dot(d1, d1), -mat.Dot(d1, d2),
+			mat.Dot(d1, d2), -mat.Dot(d2, d2),
 		})
-		c12 := mat.NewVecDense(3, nil)
-		c12.SubVec(model.c1, model.c2)
+		c21 := mat.NewVecDense(3, nil)
+		c21.SubVec(model.c2, model.c1)
 		matb := mat.NewVecDense(2, []float64{
-			-mat.Dot(c12, d1),
-			mat.Dot(c12, d2),
+			mat.Dot(c21, d1),
+			mat.Dot(c21, d2),
 		})
 		t := mat.NewVecDense(2, nil)
 		matainv := mat.NewDense(2, 2, nil)
@@ -172,4 +208,44 @@ func MinInt(nums ...int64) int64 {
 		}
 	}
 	return ret
+}
+
+func (model Model) GetMinL(params mat.VecDense) float64 {
+	theta1, theta2 := params.At(0, 0), params.At(1, 0)
+	phi1, phi2 := params.At(2, 0), params.At(3, 0)
+	n1 := mat.NewVecDense(3, []float64{
+		math.Cos(phi1) * math.Cos(theta1),
+		math.Sin(phi1) * math.Cos(theta1),
+		math.Sin(theta1),
+	})
+	n2 := mat.NewVecDense(3, []float64{
+		math.Cos(phi2) * math.Cos(theta2),
+		math.Sin(phi2) * math.Cos(theta2),
+		math.Sin(theta2),
+	})
+
+	d1, d2 := n1, n2
+	mata := mat.NewDense(2, 2, []float64{
+		mat.Dot(d1, d1), -mat.Dot(d1, d2),
+		mat.Dot(d1, d2), -mat.Dot(d2, d2),
+	})
+	c21 := mat.NewVecDense(3, nil)
+	c21.SubVec(model.c2, model.c1)
+	matb := mat.NewVecDense(2, []float64{
+		mat.Dot(c21, d1),
+		mat.Dot(c21, d2),
+	})
+	t := mat.NewVecDense(2, nil)
+	matainv := mat.NewDense(2, 2, nil)
+	error := matainv.Inverse(mata)
+	if error != nil {
+		log.Fatal("Inversed matrix does not exist")
+	}
+	t.MulVec(matainv, matb)
+	l1 := mat.NewVecDense(3, nil)
+	l1.AddScaledVec(model.c1, t.At(0, 0), d1)
+	l2 := mat.NewVecDense(3, nil)
+	l2.AddScaledVec(model.c2, t.At(1, 0), d2)
+	l1.SubVec(l1, l2)
+	return mat.Dot(l1, l1)
 }
