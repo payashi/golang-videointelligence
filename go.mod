@@ -5,6 +5,7 @@ go 1.19
 require (
 	cloud.google.com/go/storage v1.28.1
 	cloud.google.com/go/videointelligence v1.9.0
+	gonum.org/v1/gonum v0.12.0
 	gonum.org/v1/plot v0.12.0
 )
 

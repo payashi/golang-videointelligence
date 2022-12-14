@@ -1,8 +1,10 @@
 package vtrack
 
 import (
+	"fmt"
 	"log"
 	"math"
+	"math/rand"
 
 	"gonum.org/v1/gonum/mat"
 )
@@ -29,6 +31,15 @@ func Regress(tj1 Trajectory, tj2 Trajectory) {
 		}
 		// fmt.Printf("%.2f, %.2f, %.2f, %.2f\n", p1, q1, p2, q2)
 	}
+	model.c1 = mat.NewVecDense(3, []float64{0, 0, 0})
+	model.c2 = mat.NewVecDense(3, []float64{0, 1, 0})
+	model.theta1, model.theta2 = 0, 0
+	model.phi1 = rand.Float64() * math.Pi
+	model.phi2 = -rand.Float64() * math.Pi
+	model.k1, model.k2 = 1, 1
+	fmt.Printf("loss: %.3f\n", model.GetLoss())
+	model.theta1 += math.Pi * 0.5
+	fmt.Printf("loss: %.3f\n", model.GetLoss())
 }
 
 type Snapshot struct {
@@ -41,49 +52,87 @@ type Model struct {
 	k1, k2         float64
 	m              int
 	data           []Snapshot
+	c1, c2         *mat.VecDense
 }
 
-func (model *Model) getLoss() {
-	// x := []float64{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12}
-	// A := mat.NewDense(3, 4, x)
-	n1 := mat.NewDense(3, 1, []float64{
+func (model *Model) GetLoss() float64 {
+
+	n1 := mat.NewVecDense(3, []float64{
 		math.Cos(model.phi1) * math.Cos(model.theta1),
 		math.Sin(model.phi1) * math.Cos(model.theta1),
 		math.Sin(model.theta1),
 	})
-	n2 := mat.NewDense(3, 1, []float64{
+	n2 := mat.NewVecDense(3, []float64{
 		math.Cos(model.phi1) * math.Cos(model.theta1),
 		math.Sin(model.phi1) * math.Cos(model.theta1),
 		math.Sin(model.theta1),
 	})
-	a1 := mat.NewDense(3, 1, []float64{
+	a1 := mat.NewVecDense(3, []float64{
 		-math.Sin(model.phi1),
 		-math.Cos(model.phi1),
 		0,
 	})
-	a2 := mat.NewDense(3, 1, []float64{
+	a2 := mat.NewVecDense(3, []float64{
 		-math.Sin(model.phi2),
 		-math.Cos(model.phi2),
 		0,
 	})
-	b1 := mat.NewDense(3, 1, []float64{
+	b1 := mat.NewVecDense(3, []float64{
 		-math.Cos(model.phi1) * math.Sin(model.theta1),
 		-math.Sin(model.phi1) * math.Sin(model.theta1),
 		math.Cos(model.theta1),
 	})
-	b2 := mat.NewDense(3, 1, []float64{
+	b2 := mat.NewVecDense(3, []float64{
 		-math.Cos(model.phi2) * math.Sin(model.theta2),
 		-math.Sin(model.phi2) * math.Sin(model.theta2),
 		math.Cos(model.theta2),
 	})
 
+	loss := .0
+
 	for i := 0; i < model.m; i++ {
 		snap := model.data[i]
-		d1 := n1 + model.k1*(snap.p1*a1+snap.q1*b1)
-		d2 := n2 + model.k2*(snap.p2*a2+snap.q2*b2)
+		d1 := mat.NewVecDense(3, nil)
+		d1.AddVec(ScaledVec(snap.p1, a1), ScaledVec(snap.q1, b1))
+		d1.ScaleVec(model.k1, d1)
+		d1.AddVec(n1, d1)
 
+		d2 := mat.NewVecDense(3, nil)
+		d2.AddVec(ScaledVec(snap.p2, a2), ScaledVec(snap.q2, b2))
+		d2.ScaleVec(model.k2, d2)
+		d2.AddVec(n2, d2)
+
+		mata := mat.NewDense(2, 2, []float64{
+			2 * mat.Dot(d1, d1), -2 * mat.Dot(d1, d2),
+			-2 * mat.Dot(d1, d2), 2 * mat.Dot(d2, d2),
+		})
+		c12 := mat.NewVecDense(3, nil)
+		c12.SubVec(model.c1, model.c2)
+		matb := mat.NewVecDense(2, []float64{
+			-mat.Dot(c12, d1),
+			mat.Dot(c12, d2),
+		})
+		t := mat.NewVecDense(2, nil)
+		matainv := mat.NewDense(2, 2, nil)
+		error := matainv.Inverse(mata)
+		if error != nil {
+			log.Fatal("Inversed matrix does not exist")
+		}
+		t.MulVec(matainv, matb)
+		mate1 := ScaledVec(t.At(0, 0), d1)
+		mate1.AddVec(model.c1, mate1)
+		mate2 := ScaledVec(t.At(1, 0), d2)
+		mate2.AddVec(model.c2, mate2)
+		mate1.SubVec(mate1, mate2)
+		loss += mat.Dot(mate1, mate1)
 	}
+	return loss
+}
 
+func ScaledVec(alpha float64, vec *mat.VecDense) *mat.VecDense {
+	ret := mat.NewVecDense(vec.Len(), nil)
+	ret.ScaleVec(alpha, vec)
+	return ret
 }
 
 func MaxInt(nums ...int64) int64 {
