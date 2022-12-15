@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"log"
 	"math"
-	"math/rand"
 
 	"gonum.org/v1/gonum/mat"
 )
@@ -29,26 +28,20 @@ func Regress(tj1 Trajectory, tj2 Trajectory) {
 			(q1/tj1.Height - 0.5) * (tj1.Height / tj1.Width),
 			(q2/tj2.Height - 0.5) * (tj2.Height / tj2.Width),
 		}
-		// model.data[i] = Snapshot{
-		// 	p1 - tj1.Width/2,
-		// 	p2 - tj2.Width/2,
-		// 	q1 - tj1.Height/2,
-		// 	q2 - tj2.Height/2,
-		// }
 	}
 	model.c1 = mat.NewVecDense(3, []float64{0, 0, 0})
 	model.c2 = mat.NewVecDense(3, []float64{0, 1, 0})
 	model.params = mat.NewVecDense(6, []float64{
 		-0.1, -0.1, // theta
-		rand.Float64() * math.Pi, -rand.Float64() * math.Pi, // phi
-		// 0.7 * math.Pi, 1.2 * math.Pi,
+		// rand.Float64() * math.Pi, -rand.Float64() * math.Pi, // phi
+		0.7 * math.Pi, 1.2 * math.Pi,
 		10, 10,
 	})
 	model.nparams = model.params.Len()
 	// model.NaiveGradientDecent(1e-2, 1e-1, 10000)
-	// model.BatchGradientDecent(1e-2, 1e-1, 10000)
-	// loss := model.GetMinL(*mat.NewVecDense(4, []float64{1, 1, 1, -2})) // theta1, theta2, p1, p2
-	// fmt.Printf("loss: %.3f\n", loss)
+	// model.BatchGradientDecent(1e-3, 1e-1, 1000)
+	loss := model.GetMinL(*mat.NewVecDense(4, []float64{0, 1, math.Pi / 4, -math.Pi / 4})) // theta1, theta2, p1, p2
+	fmt.Printf("loss: %.3f\n", loss)
 
 }
 
@@ -100,7 +93,7 @@ func (model *Model) BatchGradientDecent(dp, mu float64, ntrials int) {
 			inc.SetVec(j, -model.GetDiff(j, dp))
 		}
 		inc.ScaleVec(1/inc.Norm(2), inc)
-		model.params.AddScaledVec(model.params, mu, inc)
+		model.params.AddScaledVec(model.params, mu*math.Exp(-4*float64(i)/float64(ntrials)), inc)
 	}
 }
 
