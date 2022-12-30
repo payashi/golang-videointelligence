@@ -20,24 +20,27 @@ import (
 	"gonum.org/v1/plot/vg"
 )
 
-var maxdur int32 = 700
-
 const width float64 = 1280
 const height float64 = 720
 
 func Extract(bucketName string, objName string, plot bool) []Trajectory {
+	// Download a json file
 	ctx := context.Background()
 	client, err := storage.NewClient(ctx)
 	if err != nil {
 		log.Fatal(err)
 	}
 	bkt := client.Bucket(bucketName)
+
+	// Get the bucket's attributes
 	attrs, err := bkt.Attrs(ctx)
 	if err != nil {
 		log.Fatal(err)
 	}
 	fmt.Printf("bucket %s, created at %s, is located in %s with storage class %s\n",
 		attrs.Name, attrs.Created, attrs.Location, attrs.StorageClass)
+
+	// Unmarshal a json file
 	obj := bkt.Object(objName + ".json")
 	r, err := obj.NewReader(ctx)
 	if err != nil {
@@ -50,12 +53,15 @@ func Extract(bucketName string, objName string, plot bool) []Trajectory {
 	if err := json.Unmarshal(slurp, &res); err != nil {
 		panic(err)
 	}
+	maxdur := res.AnnotationResults[0].Segment.EndTimeOffset.AsDuration().Milliseconds() / 100
+
+	// Translate AnnotateVideoResponse to Trajectory object
 	annots := res.AnnotationResults[0].PersonDetectionAnnotations
-	trjs := make([]Trajectory, len(annots))
+	tjs := make([]Trajectory, len(annots))
 	for i, annot := range annots {
 		track := annot.Tracks[0]
-		tj := &trjs[i]
-		tj.Plots = make(plotter.XYs, maxdur)
+		tj := &tjs[i]
+		tj.Plots = make([][]float64, maxdur)
 		tj.Conf = track.Confidence
 		tj.Start = track.Segment.StartTimeOffset.AsDuration().Milliseconds() / 100
 		tj.End = track.Segment.EndTimeOffset.AsDuration().Milliseconds() / 100
@@ -63,29 +69,31 @@ func Extract(bucketName string, objName string, plot bool) []Trajectory {
 		for _, tsobj := range track.TimestampedObjects {
 			box := tsobj.NormalizedBoundingBox
 			tidx := tsobj.TimeOffset.AsDuration().Milliseconds() / 100
-			tj.Plots[tidx].X = float64((box.Left+box.Right)/2) * width
-			tj.Plots[tidx].Y = (1 - float64(box.Top)) * height
+			tj.Plots[tidx] = []float64{
+				float64((box.Left+box.Right)/2) * width,
+				(1 - float64(box.Top)) * height,
+			}
 		}
 		tj.Length = GetLength(*tj)
 		tj.Width = width
 		tj.Height = height
 	}
-	sort.Slice(trjs, func(i, j int) bool { return trjs[i].Length > trjs[j].Length })
+	sort.Slice(tjs, func(i, j int) bool { return tjs[i].Length > tjs[j].Length })
 	if plot {
-		Plot(trjs, objName)
+		Plot(tjs, objName)
 	}
-	return trjs
+	return tjs
 }
 
 type Trajectory struct {
-	Conf         float32
-	Plots        plotter.XYs
-	Start, End   int64
-	Length       float64
+	Conf          float32
+	Plots         [][]float64
+	Start, End    int64
+	Length        float64
 	Width, Height float64
 }
 
-func (tr Trajectory) TrimmedPlots() plotter.XYs {
+func (tr Trajectory) TrimmedPlots() [][]float64 {
 	return tr.Plots[tr.Start : tr.End+1]
 
 }
@@ -93,8 +101,8 @@ func (tr Trajectory) TrimmedPlots() plotter.XYs {
 func GetLength(tr Trajectory) float64 {
 	ret := .0
 	for i := int(tr.Start); i < int(tr.End); i++ {
-		cx, cy := tr.Plots.XY(i)
-		nx, ny := tr.Plots.XY(i + 1)
+		cx, cy := tr.Plots[i][0], tr.Plots[i][1]
+		nx, ny := tr.Plots[i+1][0], tr.Plots[i+1][1]
 		dist := math.Sqrt((nx-cx)*(nx-cx) + (ny-cy)*(ny-cy))
 		ret += dist
 	}
@@ -117,7 +125,12 @@ func Plot(trjs []Trajectory, fileName string) {
 	p.Add(plotter.NewGrid())
 
 	for i, tr := range trjs[:20] {
-		ploti, err := plotter.NewScatter(tr.TrimmedPlots())
+		plots := make(plotter.XYs, len(tr.TrimmedPlots()))
+		for i, v := range tr.TrimmedPlots() {
+			plots[i].X = v[0]
+			plots[i].Y = v[1]
+		}
+		ploti, err := plotter.NewScatter(plots)
 		if err != nil {
 			panic(err)
 		}

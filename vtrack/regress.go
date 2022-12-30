@@ -20,8 +20,8 @@ func Regress(tj1 Trajectory, tj2 Trajectory) {
 	model.ndata = int(end - start + 1) // the number of datasets
 	model.data = make([]Snapshot, model.ndata)
 	for i := 0; i < model.ndata; i++ {
-		p1, q1 := tr1.XY(i)
-		p2, q2 := tr2.XY(i)
+		p1, q1 := tr1[i][0], tr1[i][1]
+		p2, q2 := tr2[i][0], tr2[i][1]
 		model.data[i] = Snapshot{
 			p1/tj1.Width - 0.5,
 			p2/tj2.Width - 0.5,

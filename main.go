@@ -1,4 +1,3 @@
-// Sample video_quickstart uses the Google Cloud Video Intelligence API to label a video.
 package main
 
 import (
@@ -12,8 +11,8 @@ var objName2 = "2022-12-07-0300-2t"
 
 func main() {
 	// vtrack.DetectPerson(bucketName, objName)
-	trjs1 := vtrack.Extract(bucketName, objName1, true)
-	trjs2 := vtrack.Extract(bucketName, objName2, true)
-	vtrack.Regress(trjs1[0], trjs2[10])
+	trjs1 := vtrack.Extract(bucketName, objName1, true)[0]
+	trjs2 := vtrack.Extract(bucketName, objName2, true)[10]
+	vtrack.Regress(trjs1, trjs2)
 	// vtrack.Demo()
 }

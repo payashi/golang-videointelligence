@@ -2,14 +2,12 @@ package vtrack
 
 import (
 	"testing"
-
-	"gonum.org/v1/plot/plotter"
 )
 
 func TestRegress(t *testing.T) {
 	tj1 := Trajectory{
 		Conf: 1,
-		Plots: plotter.XYs{
+		Plots: [][]float64{
 			{1280, 360},
 			{960, 360},
 			{640, 360},
@@ -23,7 +21,7 @@ func TestRegress(t *testing.T) {
 	}
 	tj2 := Trajectory{
 		Conf: 1,
-		Plots: plotter.XYs{
+		Plots: [][]float64{
 			{0, 360},
 			{320, 360},
 			{640, 360},
