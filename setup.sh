@@ -5,3 +5,4 @@ echo "export GOOGLE_APPLICATION_CREDENTIALS=\"$GOOGLE_APPLICATION_CREDENTIALS\""
 echo "export GOPATH=/workspace" >> ~/.bashrc
 exec $SHELL -l
 # gcloud init --project=payashi-playground
+mkdir -p /workspace/golang-videointelligence/out

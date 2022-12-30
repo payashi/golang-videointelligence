@@ -9,13 +9,13 @@ import (
 )
 
 func Regress(tj1 Trajectory, tj2 Trajectory) {
-	start := MaxInt(tj1.Start, tj2.Start)
-	end := MinInt(tj1.End, tj2.End)
+	start := MaxInt(tj1.start, tj2.start)
+	end := MinInt(tj1.end, tj2.end)
 	if start > end {
 		log.Fatal("These Trajectories have no common segments.")
 	}
-	tr1 := tj1.Plots[start : end+1]
-	tr2 := tj2.Plots[start : end+1]
+	tr1 := tj1.plots[start : end+1]
+	tr2 := tj2.plots[start : end+1]
 	model := new(Model)
 	model.ndata = int(end - start + 1) // the number of datasets
 	model.data = make([]Snapshot, model.ndata)
@@ -23,10 +23,10 @@ func Regress(tj1 Trajectory, tj2 Trajectory) {
 		p1, q1 := tr1[i][0], tr1[i][1]
 		p2, q2 := tr2[i][0], tr2[i][1]
 		model.data[i] = Snapshot{
-			p1/tj1.Width - 0.5,
-			p2/tj2.Width - 0.5,
-			(q1/tj1.Height - 0.5) * (tj1.Height / tj1.Width),
-			(q2/tj2.Height - 0.5) * (tj2.Height / tj2.Width),
+			p1/tj1.width - 0.5,
+			p2/tj2.width - 0.5,
+			(q1/tj1.height - 0.5) * (tj1.height / tj1.width),
+			(q2/tj2.height - 0.5) * (tj2.height / tj2.width),
 		}
 	}
 	model.c1 = mat.NewVecDense(3, []float64{0, 0, 0})
