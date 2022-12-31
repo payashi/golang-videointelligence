@@ -2,13 +2,13 @@ package vtrack
 
 import (
 	"fmt"
+	"image/color"
 	"log"
 	"math"
 
 	"gonum.org/v1/gonum/mat"
 	"gonum.org/v1/plot"
 	"gonum.org/v1/plot/plotter"
-	"gonum.org/v1/plot/plotutil"
 	"gonum.org/v1/plot/vg"
 )
 
@@ -100,11 +100,11 @@ func (model *Model) BatchGradientDecent(dp, mu float64, ntrials int) {
 }
 
 func (model *Model) GetDiff(i int, dp float64) float64 {
-	cv := model.GetPointsDistance(model.params)
+	cv := model.GetPointsDistance(-0.1, model.params)
 	nparams := mat.NewVecDense(model.nparams, nil)
 	nparams.SetVec(i, dp)
 	nparams.AddVec(model.params, nparams)
-	nv := model.GetPointsDistance(nparams)
+	nv := model.GetPointsDistance(-0.1, nparams)
 	return (nv - cv) / dp
 }
 
@@ -171,10 +171,10 @@ func (model *Model) project(z0 float64, params *mat.VecDense) [][]float64 {
 	return ret
 }
 
-func (m Model) Plot2D(outDir, fileName string) {
-	data := m.project(-1, m.params)
+func (m Model) Plot2D(z0 float64, outDir, fileName string) {
+	data := m.project(z0, m.params)
 	p := plot.New()
-	for i, v := range data {
+	for _, v := range data {
 		ploti1, err := plotter.NewLine(plotter.XYs{
 			{X: 0, Y: 0},
 			{X: v[0], Y: v[1]},
@@ -182,7 +182,7 @@ func (m Model) Plot2D(outDir, fileName string) {
 		if err != nil {
 			panic(err)
 		}
-		ploti1.Color = plotutil.Color(i)
+		ploti1.Color = color.RGBA{255, 0, 0, 128}
 		p.Add(ploti1)
 
 		ploti2, err := plotter.NewLine(plotter.XYs{
@@ -192,8 +192,18 @@ func (m Model) Plot2D(outDir, fileName string) {
 		if err != nil {
 			panic(err)
 		}
-		ploti2.Color = plotutil.Color(i)
+		ploti2.Color = color.RGBA{0, 255, 0, 128}
 		p.Add(ploti2)
+
+		ploti3, err := plotter.NewLine(plotter.XYs{
+			{X: v[0], Y: v[1]},
+			{X: v[2], Y: v[3]},
+		})
+		if err != nil {
+			panic(err)
+		}
+		ploti3.Color = color.RGBA{0, 0, 255, 128}
+		p.Add(ploti3)
 	}
 
 	p.Add(plotter.NewGrid())
@@ -202,8 +212,8 @@ func (m Model) Plot2D(outDir, fileName string) {
 	}
 }
 
-func (model Model) GetPointsDistance(params *mat.VecDense) float64 {
-	points := model.project(-1, params)
+func (model Model) GetPointsDistance(z0 float64, params *mat.VecDense) float64 {
+	points := model.project(z0, params)
 	sum := .0
 	for _, p := range points {
 		x1, y1, x2, y2 := p[0], p[1], p[2], p[3]
