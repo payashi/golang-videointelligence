@@ -10,21 +10,20 @@ import (
 )
 
 var outDir = "/workspace/golang-videointelligence/out"
-
 var bucketName = "gcs-video-tracking"
-
 var objName1 = "2022-12-07-0300-1t"
 var objName2 = "2022-12-07-0300-2t"
 
 func main() {
-	tj1 := getTrajectories(objName1)
-	tj2 := getTrajectories(objName2)
-	tj1.Temp()
-	tj2.Temp()
-	// vtrack.Demo()
+	ar1 := getAnnotationResults(objName1)
+	ar2 := getAnnotationResults(objName2)
+	model := vtrack.NewModel(ar1.At(0), ar2.At(10))
+	model.Plot2D(outDir, "before")
+	model.BatchGradientDecent(1e-2, 1e-1, 1000)
+	model.Plot2D(outDir, "after")
 }
 
-func getTrajectories(objName string) vtrack.AnnotationResults {
+func getAnnotationResults(objName string) vtrack.AnnotationResults {
 	filePath := fmt.Sprintf("%s/%s.json", outDir, objName)
 	if file, err := os.Open(filePath); err == nil {
 		fmt.Printf("File exists\n")

@@ -6,9 +6,13 @@ import (
 	"math"
 
 	"gonum.org/v1/gonum/mat"
+	"gonum.org/v1/plot"
+	"gonum.org/v1/plot/plotter"
+	"gonum.org/v1/plot/plotutil"
+	"gonum.org/v1/plot/vg"
 )
 
-func Regress(tj1 Trajectory, tj2 Trajectory) {
+func NewModel(tj1, tj2 Trajectory, data ...*mat.VecDense) *Model {
 	start := MaxInt(tj1.start, tj2.start)
 	end := MinInt(tj1.end, tj2.end)
 	if start > end {
@@ -31,18 +35,17 @@ func Regress(tj1 Trajectory, tj2 Trajectory) {
 	}
 	model.c1 = mat.NewVecDense(3, []float64{0, 0, 0})
 	model.c2 = mat.NewVecDense(3, []float64{0, 1, 0})
-	model.params = mat.NewVecDense(6, []float64{
-		-0.1, -0.1, // theta
-		// rand.Float64() * math.Pi, -rand.Float64() * math.Pi, // phi
-		0.7 * math.Pi, 1.2 * math.Pi,
-		10, 10,
-	})
+	if len(data) > 0 {
+		model.params = data[0]
+	} else {
+		model.params = mat.NewVecDense(6, []float64{
+			-0.1, -0.1, // theta
+			0.7 * math.Pi, 1.2 * math.Pi,
+			10, 10,
+		})
+	}
 	model.nparams = model.params.Len()
-	// model.NaiveGradientDecent(1e-2, 1e-1, 10000)
-	// model.BatchGradientDecent(1e-3, 1e-1, 1000)
-	loss := model.GetMinL(*mat.NewVecDense(4, []float64{0, 1, math.Pi / 4, -math.Pi / 4})) // theta1, theta2, p1, p2
-	fmt.Printf("loss: %.3f\n", loss)
-
+	return model
 }
 
 type Snapshot struct {
@@ -57,7 +60,7 @@ type Model struct {
 }
 
 func (model Model) PrintParams() {
-	fmt.Printf("loss: %.5f\t", model.GetLoss(*model.params))
+	fmt.Printf("loss: %.5f\t", model.GetLinesDistance(*model.params))
 	fmt.Printf("theta1: %.2f pi, theta2: %.2f pi\t",
 		model.params.At(0, 0)/math.Pi,
 		model.params.At(1, 0)/math.Pi,
@@ -87,7 +90,6 @@ func (model *Model) NaiveGradientDecent(dp, mu float64, ntrials int) {
 
 func (model *Model) BatchGradientDecent(dp, mu float64, ntrials int) {
 	for i := 0; i < ntrials; i++ {
-		model.PrintParams()
 		inc := mat.NewVecDense(model.nparams, nil)
 		for j := 0; j < model.nparams; j++ {
 			inc.SetVec(j, -model.GetDiff(j, dp))
@@ -98,15 +100,119 @@ func (model *Model) BatchGradientDecent(dp, mu float64, ntrials int) {
 }
 
 func (model *Model) GetDiff(i int, dp float64) float64 {
-	cv := model.GetLoss(*model.params)
+	cv := model.GetPointsDistance(model.params)
 	nparams := mat.NewVecDense(model.nparams, nil)
 	nparams.SetVec(i, dp)
 	nparams.AddVec(model.params, nparams)
-	nv := model.GetLoss(*nparams)
+	nv := model.GetPointsDistance(nparams)
 	return (nv - cv) / dp
 }
 
-func (model *Model) GetLoss(params mat.VecDense) float64 {
+func (model *Model) project(z0 float64, params *mat.VecDense) [][]float64 {
+	theta1, theta2 := params.At(0, 0), params.At(1, 0)
+	phi1, phi2 := params.At(2, 0), params.At(3, 0)
+	k1, k2 := params.At(4, 0), params.At(5, 0)
+
+	n1 := mat.NewVecDense(3, []float64{
+		math.Cos(phi1) * math.Cos(theta1),
+		math.Sin(phi1) * math.Cos(theta1),
+		math.Sin(theta1),
+	})
+	n2 := mat.NewVecDense(3, []float64{
+		math.Cos(phi2) * math.Cos(theta2),
+		math.Sin(phi2) * math.Cos(theta2),
+		math.Sin(theta2),
+	})
+	a1 := mat.NewVecDense(3, []float64{
+		-math.Sin(phi1),
+		math.Cos(phi1),
+		0,
+	})
+	a2 := mat.NewVecDense(3, []float64{
+		-math.Sin(phi2),
+		math.Cos(phi2),
+		0,
+	})
+	b1 := mat.NewVecDense(3, []float64{
+		-math.Cos(phi1) * math.Sin(theta1),
+		-math.Sin(phi1) * math.Sin(theta1),
+		math.Cos(theta1),
+	})
+	b2 := mat.NewVecDense(3, []float64{
+		-math.Cos(phi2) * math.Sin(theta2),
+		-math.Sin(phi2) * math.Sin(theta2),
+		math.Cos(theta2),
+	})
+
+	ret := make([][]float64, model.ndata)
+
+	for i := 0; i < model.ndata; i++ {
+		snap := model.data[i]
+		d1 := mat.NewVecDense(3, nil)
+		d1.AddScaledVec(d1, snap.p1, a1)
+		d1.AddScaledVec(d1, snap.q1, b1)
+		d1.AddScaledVec(n1, k1, d1)
+		t1 := (z0 - model.c1.At(2, 0)) / d1.At(2, 0)
+
+		d2 := mat.NewVecDense(3, nil)
+		d2.AddScaledVec(d2, snap.p2, a2)
+		d2.AddScaledVec(d2, snap.q2, b2)
+		d2.AddScaledVec(n2, k2, d2)
+		t2 := (z0 - model.c2.At(2, 0)) / d2.At(2, 0)
+
+		// x1, y1, x2, y2
+		ret[i] = []float64{
+			model.c1.At(0, 0) + t1*d1.At(0, 0),
+			model.c1.At(1, 0) + t1*d1.At(1, 0),
+			model.c2.At(0, 0) + t2*d2.At(0, 0),
+			model.c2.At(1, 0) + t2*d2.At(1, 0),
+		}
+	}
+	return ret
+}
+
+func (m Model) Plot2D(outDir, fileName string) {
+	data := m.project(-1, m.params)
+	p := plot.New()
+	for i, v := range data {
+		ploti1, err := plotter.NewLine(plotter.XYs{
+			{X: 0, Y: 0},
+			{X: v[0], Y: v[1]},
+		})
+		if err != nil {
+			panic(err)
+		}
+		ploti1.Color = plotutil.Color(i)
+		p.Add(ploti1)
+
+		ploti2, err := plotter.NewLine(plotter.XYs{
+			{X: 0, Y: 1},
+			{X: v[2], Y: v[3]},
+		})
+		if err != nil {
+			panic(err)
+		}
+		ploti2.Color = plotutil.Color(i)
+		p.Add(ploti2)
+	}
+
+	p.Add(plotter.NewGrid())
+	if err := p.Save(vg.Inch*6, vg.Inch*6, fmt.Sprintf("%s/%s.png", outDir, fileName)); err != nil {
+		panic(err)
+	}
+}
+
+func (model Model) GetPointsDistance(params *mat.VecDense) float64 {
+	points := model.project(-1, params)
+	sum := .0
+	for _, p := range points {
+		x1, y1, x2, y2 := p[0], p[1], p[2], p[3]
+		sum += math.Sqrt((x1-x2)*(x1-x2) + (y1-y2)*(y1-y2))
+	}
+	return sum
+}
+
+func (model Model) GetLinesDistance(params mat.VecDense) float64 {
 	theta1, theta2 := params.At(0, 0), params.At(1, 0)
 	phi1, phi2 := params.At(2, 0), params.At(3, 0)
 	k1, k2 := params.At(4, 0), params.At(5, 0)

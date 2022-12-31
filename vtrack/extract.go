@@ -7,9 +7,7 @@ import (
 	"io"
 	"log"
 	"math"
-	"math/rand"
 	"sort"
-	"time"
 
 	"cloud.google.com/go/storage"
 	"cloud.google.com/go/videointelligence/apiv1/videointelligencepb"
@@ -117,7 +115,6 @@ func Getlength(tj Trajectory) float64 {
 }
 
 func (ar AnnotationResults) Plot(fileName string) {
-	rand.Seed(time.Now().UnixNano())
 	p := plot.New()
 
 	// p.Title.Text = "Trajectories"
@@ -154,10 +151,6 @@ func (ar AnnotationResults) Plot(fileName string) {
 	if err := p.Save(pwidth, pheight, fmt.Sprintf("%s.png", fileName)); err != nil {
 		panic(err)
 	}
-}
-
-func (ar AnnotationResults) Temp() {
-	fmt.Println(ar.trajectories[0].conf)
 }
 
 func (tj Trajectory) MarshalJSON() ([]byte, error) {
@@ -201,6 +194,10 @@ func (tj *Trajectory) UnmarshalJSON(b []byte) error {
 	tj.width = tj2.Width
 	tj.height = tj2.Height
 	return err
+}
+
+func (ar AnnotationResults) At(index int) Trajectory {
+	return ar.trajectories[index]
 }
 
 func (ar AnnotationResults) MarshalJSON() ([]byte, error) {
