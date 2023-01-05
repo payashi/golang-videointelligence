@@ -18,9 +18,9 @@ func main() {
 	ar1 := getAnnotationResults(objName1)
 	ar2 := getAnnotationResults(objName2)
 	model := vtrack.NewModel(ar1.At(0), ar2.At(10))
-	var z0 float64 = -0.1
+	var z0 float64 = -0.08
 	model.Plot2D(z0, outDir, "before")
-	model.BatchGradientDecent(1e-2, 1e-1, 100000)
+	model.BatchGradientDecent(1e-2, 1e-1, 10000)
 	model.Plot2D(z0, outDir, "after")
 	model.PrintParams()
 }

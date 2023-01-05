@@ -12,6 +12,8 @@ import (
 	"gonum.org/v1/plot/vg"
 )
 
+// TODO: draw frames
+
 func NewModel(tj1, tj2 Trajectory, data ...*mat.VecDense) *Model {
 	start := MaxInt(tj1.start, tj2.start)
 	end := MinInt(tj1.end, tj2.end)
@@ -38,10 +40,10 @@ func NewModel(tj1, tj2 Trajectory, data ...*mat.VecDense) *Model {
 	if len(data) > 0 {
 		model.params = data[0]
 	} else {
-		model.params = mat.NewVecDense(6, []float64{
+		model.params = mat.NewVecDense(5, []float64{
 			-0.1, -0.1, // theta
 			0.7 * math.Pi, 1.2 * math.Pi,
-			10, 10,
+			10, // k
 		})
 	}
 	model.nparams = model.params.Len()
@@ -60,7 +62,6 @@ type Model struct {
 }
 
 func (model Model) PrintParams() {
-	fmt.Printf("loss: %.5f\t", model.GetLinesDistance(*model.params))
 	fmt.Printf("theta1: %.2f pi, theta2: %.2f pi\t",
 		model.params.At(0, 0)/math.Pi,
 		model.params.At(1, 0)/math.Pi,
@@ -69,9 +70,8 @@ func (model Model) PrintParams() {
 		model.params.At(2, 0)/math.Pi,
 		model.params.At(3, 0)/math.Pi,
 	)
-	fmt.Printf("k1: %.2f, k2: %.2f\n",
+	fmt.Printf("k: %.2f\n",
 		model.params.At(4, 0),
-		model.params.At(5, 0),
 	)
 }
 
@@ -111,7 +111,7 @@ func (model *Model) GetDiff(i int, dp float64) float64 {
 func (model *Model) project(z0 float64, params *mat.VecDense) [][]float64 {
 	theta1, theta2 := params.At(0, 0), params.At(1, 0)
 	phi1, phi2 := params.At(2, 0), params.At(3, 0)
-	k1, k2 := params.At(4, 0), params.At(5, 0)
+	k := params.At(4, 0)
 
 	n1 := mat.NewVecDense(3, []float64{
 		math.Cos(phi1) * math.Cos(theta1),
@@ -151,13 +151,13 @@ func (model *Model) project(z0 float64, params *mat.VecDense) [][]float64 {
 		d1 := mat.NewVecDense(3, nil)
 		d1.AddScaledVec(d1, snap.p1, a1)
 		d1.AddScaledVec(d1, snap.q1, b1)
-		d1.AddScaledVec(n1, k1, d1)
+		d1.AddScaledVec(n1, k, d1)
 		t1 := (z0 - model.c1.At(2, 0)) / d1.At(2, 0)
 
 		d2 := mat.NewVecDense(3, nil)
 		d2.AddScaledVec(d2, snap.p2, a2)
 		d2.AddScaledVec(d2, snap.q2, b2)
-		d2.AddScaledVec(n2, k2, d2)
+		d2.AddScaledVec(n2, k, d2)
 		t2 := (z0 - model.c2.At(2, 0)) / d2.At(2, 0)
 
 		// x1, y1, x2, y2
@@ -217,86 +217,10 @@ func (model Model) GetPointsDistance(z0 float64, params *mat.VecDense) float64 {
 	sum := .0
 	for _, p := range points {
 		x1, y1, x2, y2 := p[0], p[1], p[2], p[3]
-		sum += math.Sqrt((x1-x2)*(x1-x2) + (y1-y2)*(y1-y2))
+		sum += (x1-x2)*(x1-x2) + (y1-y2)*(y1-y2)
 	}
-	return sum
-}
-
-func (model Model) GetLinesDistance(params mat.VecDense) float64 {
-	theta1, theta2 := params.At(0, 0), params.At(1, 0)
-	phi1, phi2 := params.At(2, 0), params.At(3, 0)
-	k1, k2 := params.At(4, 0), params.At(5, 0)
-
-	n1 := mat.NewVecDense(3, []float64{
-		math.Cos(phi1) * math.Cos(theta1),
-		math.Sin(phi1) * math.Cos(theta1),
-		math.Sin(theta1),
-	})
-	n2 := mat.NewVecDense(3, []float64{
-		math.Cos(phi2) * math.Cos(theta2),
-		math.Sin(phi2) * math.Cos(theta2),
-		math.Sin(theta2),
-	})
-	a1 := mat.NewVecDense(3, []float64{
-		-math.Sin(phi1),
-		math.Cos(phi1),
-		0,
-	})
-	a2 := mat.NewVecDense(3, []float64{
-		-math.Sin(phi2),
-		math.Cos(phi2),
-		0,
-	})
-	b1 := mat.NewVecDense(3, []float64{
-		-math.Cos(phi1) * math.Sin(theta1),
-		-math.Sin(phi1) * math.Sin(theta1),
-		math.Cos(theta1),
-	})
-	b2 := mat.NewVecDense(3, []float64{
-		-math.Cos(phi2) * math.Sin(theta2),
-		-math.Sin(phi2) * math.Sin(theta2),
-		math.Cos(theta2),
-	})
-
-	loss := .0
-
-	for i := 0; i < model.ndata; i++ {
-		snap := model.data[i]
-		d1 := mat.NewVecDense(3, nil)
-		d1.AddScaledVec(d1, snap.p1, a1)
-		d1.AddScaledVec(d1, snap.q1, b1)
-		d1.AddScaledVec(n1, k1, d1)
-
-		d2 := mat.NewVecDense(3, nil)
-		d2.AddScaledVec(d2, snap.p2, a2)
-		d2.AddScaledVec(d2, snap.q2, b2)
-		d2.AddScaledVec(n2, k2, d2)
-
-		mata := mat.NewDense(2, 2, []float64{
-			mat.Dot(d1, d1), -mat.Dot(d1, d2),
-			mat.Dot(d1, d2), -mat.Dot(d2, d2),
-		})
-		c21 := mat.NewVecDense(3, nil)
-		c21.SubVec(model.c2, model.c1)
-		matb := mat.NewVecDense(2, []float64{
-			mat.Dot(c21, d1),
-			mat.Dot(c21, d2),
-		})
-		t := mat.NewVecDense(2, nil)
-		matainv := mat.NewDense(2, 2, nil)
-		error := matainv.Inverse(mata)
-		if error != nil {
-			log.Fatal("Inversed matrix does not exist")
-		}
-		t.MulVec(matainv, matb)
-		l1 := mat.NewVecDense(3, nil)
-		l1.AddScaledVec(model.c1, t.At(0, 0), d1)
-		l2 := mat.NewVecDense(3, nil)
-		l2.AddScaledVec(model.c2, t.At(1, 0), d2)
-		l1.SubVec(l1, l2)
-		loss += mat.Dot(l1, l1)
-	}
-	return loss
+	k := params.At(4, 0)
+	return sum / (k * k)
 }
 
 func MaxInt(nums ...int64) int64 {
@@ -317,44 +241,4 @@ func MinInt(nums ...int64) int64 {
 		}
 	}
 	return ret
-}
-
-func (model Model) GetMinL(params mat.VecDense) float64 {
-	theta1, theta2 := params.At(0, 0), params.At(1, 0)
-	phi1, phi2 := params.At(2, 0), params.At(3, 0)
-	n1 := mat.NewVecDense(3, []float64{
-		math.Cos(phi1) * math.Cos(theta1),
-		math.Sin(phi1) * math.Cos(theta1),
-		math.Sin(theta1),
-	})
-	n2 := mat.NewVecDense(3, []float64{
-		math.Cos(phi2) * math.Cos(theta2),
-		math.Sin(phi2) * math.Cos(theta2),
-		math.Sin(theta2),
-	})
-
-	d1, d2 := n1, n2
-	mata := mat.NewDense(2, 2, []float64{
-		mat.Dot(d1, d1), -mat.Dot(d1, d2),
-		mat.Dot(d1, d2), -mat.Dot(d2, d2),
-	})
-	c21 := mat.NewVecDense(3, nil)
-	c21.SubVec(model.c2, model.c1)
-	matb := mat.NewVecDense(2, []float64{
-		mat.Dot(c21, d1),
-		mat.Dot(c21, d2),
-	})
-	t := mat.NewVecDense(2, nil)
-	matainv := mat.NewDense(2, 2, nil)
-	error := matainv.Inverse(mata)
-	if error != nil {
-		log.Fatal("Inversed matrix does not exist")
-	}
-	t.MulVec(matainv, matb)
-	l1 := mat.NewVecDense(3, nil)
-	l1.AddScaledVec(model.c1, t.At(0, 0), d1)
-	l2 := mat.NewVecDense(3, nil)
-	l2.AddScaledVec(model.c2, t.At(1, 0), d2)
-	l1.SubVec(l1, l2)
-	return mat.Dot(l1, l1)
 }
