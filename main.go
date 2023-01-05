@@ -22,6 +22,7 @@ func main() {
 	model.Plot2D(z0, outDir, "before")
 	model.BatchGradientDecent(1e-2, 1e-1, 100000)
 	model.Plot2D(z0, outDir, "after")
+	model.PrintParams()
 }
 
 func getAnnotationResults(objName string) vtrack.AnnotationResults {
