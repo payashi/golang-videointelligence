@@ -22,11 +22,9 @@ func main() {
 	// for _, z0 := range LinSpace(-0.2, -1.2, 21) {
 	z0 := -0.5
 	params := mat.NewVecDense(6, []float64{
-		// -0.1 * math.Pi, -0.1 * math.Pi, // theta
-		// -0.5 * math.Pi, -0.3 * math.Pi, // phi
 		-0.01 * math.Pi, -0.01 * math.Pi, // theta
-		-0.25 * math.Pi, 0.25 * math.Pi, // phi
-		10, // k
+		-0.25 * math.Pi, 0.23 * math.Pi, // phi
+		1,  // k
 		z0, // z0
 	})
 	model := vtrack.NewModel(ar1.At(0), ar2.At(10), params)

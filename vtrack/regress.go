@@ -41,9 +41,9 @@ func NewModel(tj1, tj2 Trajectory, data ...*mat.VecDense) *Model {
 	} else {
 		// Substitute with default parameters
 		model.params = mat.NewVecDense(6, []float64{
-			-0.499 * math.Pi, -0.499 * math.Pi, // theta
-			0, 0,
-			10,   // k
+			-0.06 * math.Pi, -0.18 * math.Pi, // theta
+			-0.25 * math.Pi, 0.23 * math.Pi, // phi
+			1,    // k
 			-0.1, // z0
 		})
 	}
@@ -94,7 +94,7 @@ func (m Model) PrintParams(blender bool) {
 
 func (model *Model) NaiveGradientDecent(dp, mu float64, ntrials int) {
 	for i := 0; i < ntrials; i++ {
-		for j := 0; j < model.nparams; j++ {
+		for j := 0; j < model.nparams-1; j++ {
 			for k := 0; k < 100; k++ {
 				inc := mat.NewVecDense(model.nparams, nil)
 				inc.SetVec(j, -mu*model.GetDiff(j, dp))
@@ -107,7 +107,7 @@ func (model *Model) NaiveGradientDecent(dp, mu float64, ntrials int) {
 func (model *Model) BatchGradientDecent(dp, mu float64, ntrials int) {
 	for i := 0; i < ntrials; i++ {
 		inc := mat.NewVecDense(model.nparams, nil)
-		for j := 0; j < model.nparams-1; j++ {
+		for j := 0; j < 2; j++ {
 			inc.SetVec(j, -model.GetDiff(j, dp))
 		}
 		inc.ScaleVec(1/inc.Norm(2), inc)
