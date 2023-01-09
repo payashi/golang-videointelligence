@@ -4,9 +4,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"math"
 	"os"
 
 	"github.com/payashi/vtrack"
+	"gonum.org/v1/gonum/mat"
 )
 
 var outDir = "/workspace/golang-videointelligence/out"
@@ -17,18 +19,35 @@ var objName2 = "2022-12-07-0300-2t"
 func main() {
 	ar1 := getAnnotationResults(objName1)
 	ar2 := getAnnotationResults(objName2)
-	model := vtrack.NewModel(ar1.At(0), ar2.At(10))
-	var z0 float64 = -0.08
-	model.Plot2D(z0, outDir, "before")
-	model.BatchGradientDecent(1e-2, 1e-1, 10000)
-	model.Plot2D(z0, outDir, "after")
-	model.PrintParams()
+	// for _, z0 := range LinSpace(-0.2, -1.2, 21) {
+	z0 := -0.5
+	params := mat.NewVecDense(6, []float64{
+		// -0.1 * math.Pi, -0.1 * math.Pi, // theta
+		// -0.5 * math.Pi, -0.3 * math.Pi, // phi
+		-0.01 * math.Pi, -0.01 * math.Pi, // theta
+		-0.25 * math.Pi, 0.25 * math.Pi, // phi
+		10, // k
+		z0, // z0
+	})
+	model := vtrack.NewModel(ar1.At(0), ar2.At(10), params)
+	model.Plot2D(outDir, "before")
+	model.BatchGradientDecent(1e-2, 1e-1, 50000)
+	model.Plot2D(outDir, "after")
+	model.PrintParams(true)
+	model.PrintParams(false)
+}
+
+func LinSpace(start, end float64, num int) []float64 {
+	ret := make([]float64, num)
+	for i := 0; i < num; i++ {
+		ret[i] = start + (end-start)*float64(i)/float64(num-1)
+	}
+	return ret
 }
 
 func getAnnotationResults(objName string) vtrack.AnnotationResults {
 	filePath := fmt.Sprintf("%s/%s.json", outDir, objName)
 	if file, err := os.Open(filePath); err == nil {
-		fmt.Printf("File exists\n")
 		defer file.Close()
 		b, err := ioutil.ReadAll(file)
 		if err != nil {

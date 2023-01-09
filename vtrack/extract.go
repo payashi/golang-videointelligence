@@ -73,7 +73,7 @@ func Extract(bucketName string, objName string, plot bool) AnnotationResults {
 				(1 - float64(box.Top)) * height,
 			}
 		}
-		tj.length = Getlength(*tj)
+		tj.length = tj.calcLength()
 		tj.width = width
 		tj.height = height
 	}
@@ -103,7 +103,7 @@ func (tj Trajectory) Trimmedplots() [][]float64 {
 
 }
 
-func Getlength(tj Trajectory) float64 {
+func (tj Trajectory) calcLength() float64 {
 	ret := .0
 	for i := int(tj.start); i < int(tj.end); i++ {
 		cx, cy := tj.plots[i][0], tj.plots[i][1]
