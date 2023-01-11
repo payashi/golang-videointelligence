@@ -62,6 +62,36 @@ type Model struct {
 	c1, c2         *mat.VecDense
 }
 
+func (m Model) GetPhis() (float64, float64) { // phi1, phi2
+	data := m.project(m.params, []Snapshot{m.data[0], m.data[m.ndata-1]})
+	l1 := []float64{data[1][0] - data[0][0], data[1][1] - data[0][1]}
+	l2 := []float64{data[1][2] - data[0][2], data[1][3] - data[0][3]}
+	var phi1, phi2 float64
+	if l1[0] > 0 {
+		phi1 = -0.5*math.Pi - math.Atan(l1[1]/l1[0])
+	} else if l1[0] == 0 {
+		if l1[1] > 0 {
+			phi1 = math.Pi
+		} else {
+			phi1 = 0
+		}
+	} else {
+		phi1 = +0.5*math.Pi - math.Atan(l1[1]/l1[0])
+	}
+	if l2[0] > 0 {
+		phi2 = -0.5*math.Pi - math.Atan(l2[1]/l2[0])
+	} else if l2[0] == 0 {
+		if l2[1] > 0 {
+			phi2 = math.Pi
+		} else {
+			phi2 = 0
+		}
+	} else {
+		phi2 = +0.5*math.Pi - math.Atan(l2[1]/l2[0])
+	}
+	return phi1, phi2
+}
+
 func (m Model) PrintParams(blender bool) {
 	if !blender {
 		// by radian
@@ -92,26 +122,23 @@ func (m Model) PrintParams(blender bool) {
 	)
 }
 
-func (model *Model) NaiveGradientDecent(dp, mu float64, ntrials int) {
+func (m *Model) BatchGradientDecent(dp, mu float64, ntrials int) {
 	for i := 0; i < ntrials; i++ {
-		for j := 0; j < model.nparams-1; j++ {
-			for k := 0; k < 100; k++ {
-				inc := mat.NewVecDense(model.nparams, nil)
-				inc.SetVec(j, -mu*model.GetDiff(j, dp))
-				model.params.AddVec(model.params, inc)
-			}
-		}
-	}
-}
 
-func (model *Model) BatchGradientDecent(dp, mu float64, ntrials int) {
-	for i := 0; i < ntrials; i++ {
-		inc := mat.NewVecDense(model.nparams, nil)
-		for j := 0; j < 2; j++ {
-			inc.SetVec(j, -model.GetDiff(j, dp))
+		inc := mat.NewVecDense(m.nparams, nil)
+
+		// Update theta
+		for _, j := range []int{0, 1} {
+			inc.SetVec(j, -m.GetDiff(j, dp))
 		}
+
+		// Update phi
+		phi1, phi2 := m.GetPhis()
+		inc.SetVec(2, phi1)
+		inc.SetVec(3, phi2)
+
 		inc.ScaleVec(1/inc.Norm(2), inc)
-		model.params.AddScaledVec(model.params, mu*math.Exp(-4*float64(i)/float64(ntrials)), inc)
+		m.params.AddScaledVec(m.params, mu*math.Exp(-4*float64(i)/float64(ntrials)), inc)
 	}
 }
 

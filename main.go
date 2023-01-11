@@ -23,7 +23,7 @@ func main() {
 	z0 := -0.5
 	params := mat.NewVecDense(6, []float64{
 		-0.01 * math.Pi, -0.01 * math.Pi, // theta
-		-0.25 * math.Pi, 0.23 * math.Pi, // phi
+		0., 0.,
 		1,  // k
 		z0, // z0
 	})
@@ -31,6 +31,8 @@ func main() {
 	model.Plot2D(outDir, "before")
 	model.BatchGradientDecent(1e-2, 1e-1, 50000)
 	model.Plot2D(outDir, "after")
+	// phi1, phi2 := model.GetPhis()
+	// fmt.Printf("%.2f pi, %.2f pi\n", phi1/math.Pi, phi2/math.Pi)
 	model.PrintParams(true)
 	model.PrintParams(false)
 }
