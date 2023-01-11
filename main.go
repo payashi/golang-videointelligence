@@ -20,19 +20,16 @@ func main() {
 	ar1 := getAnnotationResults(objName1)
 	ar2 := getAnnotationResults(objName2)
 	// for _, z0 := range LinSpace(-0.2, -1.2, 21) {
-	z0 := -0.5
-	params := mat.NewVecDense(6, []float64{
-		-0.01 * math.Pi, -0.01 * math.Pi, // theta
-		0., 0.,
-		1,  // k
-		z0, // z0
-	})
-	model := vtrack.NewModel(ar1.At(0), ar2.At(10), params)
+	model := vtrack.NewModel(ar1.At(0), ar2.At(10),
+		mat.NewVecDense(4, []float64{ // params
+			-0.01 * math.Pi, -0.01 * math.Pi, // theta1, theta2
+			0.5, 0.5, // z1, z2
+		}),
+		vtrack.Config{Phi1: 0., Phi2: 0., K: 1}, // Phi1, Phi2, K
+	)
 	model.Plot2D(outDir, "before")
-	model.BatchGradientDecent(1e-2, 1e-1, 50000)
+	model.BatchGradientDecent(1e-2, 1e-1, 200000)
 	model.Plot2D(outDir, "after")
-	// phi1, phi2 := model.GetPhis()
-	// fmt.Printf("%.2f pi, %.2f pi\n", phi1/math.Pi, phi2/math.Pi)
 	model.PrintParams(true)
 	model.PrintParams(false)
 }

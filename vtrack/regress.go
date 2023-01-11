@@ -13,7 +13,7 @@ import (
 	"gonum.org/v1/plot/vg/draw"
 )
 
-func NewModel(tj1, tj2 Trajectory, data ...*mat.VecDense) *Model {
+func NewModel(tj1, tj2 Trajectory, params *mat.VecDense, config Config) *Model {
 	start := MaxInt(tj1.start, tj2.start)
 	end := MinInt(tj1.end, tj2.end)
 	if start > end {
@@ -34,20 +34,9 @@ func NewModel(tj1, tj2 Trajectory, data ...*mat.VecDense) *Model {
 			(q2 - 0.5) * (tj2.height / tj2.width),
 		}
 	}
-	model.c1 = mat.NewVecDense(3, []float64{0, 0, 0})
-	model.c2 = mat.NewVecDense(3, []float64{0, -1, 0})
-	if len(data) > 0 {
-		model.params = data[0]
-	} else {
-		// Substitute with default parameters
-		model.params = mat.NewVecDense(6, []float64{
-			-0.06 * math.Pi, -0.18 * math.Pi, // theta
-			-0.25 * math.Pi, 0.23 * math.Pi, // phi
-			1,    // k
-			-0.1, // z0
-		})
-	}
-	model.nparams = model.params.Len()
+	model.params = params
+	model.nparams = params.Len()
+	model.config = config
 	return model
 }
 
@@ -55,11 +44,15 @@ type Snapshot struct {
 	p1, p2, q1, q2 float64
 }
 
+type Config struct {
+	Phi1, Phi2, K float64
+}
+
 type Model struct {
 	nparams, ndata int
 	params         *mat.VecDense
+	config         Config
 	data           []Snapshot
-	c1, c2         *mat.VecDense
 }
 
 func (m Model) GetPhis() (float64, float64) { // phi1, phi2
@@ -100,22 +93,23 @@ func (m Model) PrintParams(blender bool) {
 			m.params.At(1, 0)/math.Pi,
 		)
 		fmt.Printf("phi1: %.2f pi, phi2: %.2f pi\t",
-			m.params.At(2, 0)/math.Pi,
-			m.params.At(3, 0)/math.Pi,
+			m.config.Phi1/math.Pi,
+			m.config.Phi2/math.Pi,
 		)
 	} else {
 		fmt.Printf("(%.2f deg, 0.00 deg, %.2f deg), ",
 			m.params.At(0, 0)/math.Pi*180+90,
-			m.params.At(2, 0)/math.Pi*180-90,
+			m.config.Phi1/math.Pi*180-90,
 		)
 		fmt.Printf("(%.2f deg, 0.00 deg, %.2f deg)\t",
 			m.params.At(1, 0)/math.Pi*180+90,
-			m.params.At(3, 0)/math.Pi*180-90,
+			m.config.Phi2/math.Pi*180-90,
 		)
 	}
-	fmt.Printf("k: %.2f, z0: %.4f, ",
-		m.params.At(4, 0),
-		m.params.At(5, 0),
+	fmt.Printf("k: %.2f, z1: %.2f, z2: %.2f ",
+		m.config.K,
+		m.params.At(2, 0),
+		m.params.At(3, 0),
 	)
 	fmt.Printf("loss: %.5f\n",
 		m.GetPointsDistance(m.params),
@@ -124,19 +118,16 @@ func (m Model) PrintParams(blender bool) {
 
 func (m *Model) BatchGradientDecent(dp, mu float64, ntrials int) {
 	for i := 0; i < ntrials; i++ {
-
-		inc := mat.NewVecDense(m.nparams, nil)
-
-		// Update theta
-		for _, j := range []int{0, 1} {
-			inc.SetVec(j, -m.GetDiff(j, dp))
-		}
-
 		// Update phi
 		phi1, phi2 := m.GetPhis()
-		inc.SetVec(2, phi1)
-		inc.SetVec(3, phi2)
+		m.config.Phi1 += phi1
+		m.config.Phi2 += phi2
 
+		inc := mat.NewVecDense(m.nparams, nil)
+		// Update theta, z
+		for j := 0; j < m.params.Len(); j++ {
+			inc.SetVec(j, -m.GetDiff(j, dp))
+		}
 		inc.ScaleVec(1/inc.Norm(2), inc)
 		m.params.AddScaledVec(m.params, mu*math.Exp(-4*float64(i)/float64(ntrials)), inc)
 	}
@@ -151,40 +142,38 @@ func (model *Model) GetDiff(i int, dp float64) float64 {
 	return (nv - cv) / dp
 }
 
-func (model *Model) project(params *mat.VecDense, data []Snapshot) [][]float64 {
+func (m *Model) project(params *mat.VecDense, data []Snapshot) [][]float64 {
 	theta1, theta2 := params.At(0, 0), params.At(1, 0)
-	phi1, phi2 := params.At(2, 0), params.At(3, 0)
-	k := params.At(4, 0)
-	z0 := params.At(5, 0)
+	z1, z2 := params.At(2, 0), params.At(3, 0)
 
 	n1 := mat.NewVecDense(3, []float64{
-		math.Cos(phi1) * math.Cos(theta1),
-		math.Sin(phi1) * math.Cos(theta1),
+		math.Cos(m.config.Phi1) * math.Cos(theta1),
+		math.Sin(m.config.Phi1) * math.Cos(theta1),
 		math.Sin(theta1),
 	})
 	n2 := mat.NewVecDense(3, []float64{
-		math.Cos(phi2) * math.Cos(theta2),
-		math.Sin(phi2) * math.Cos(theta2),
+		math.Cos(m.config.Phi2) * math.Cos(theta2),
+		math.Sin(m.config.Phi2) * math.Cos(theta2),
 		math.Sin(theta2),
 	})
 	a1 := mat.NewVecDense(3, []float64{
-		math.Sin(phi1),
-		-math.Cos(phi1),
+		math.Sin(m.config.Phi1),
+		-math.Cos(m.config.Phi1),
 		0,
 	})
 	a2 := mat.NewVecDense(3, []float64{
-		math.Sin(phi2),
-		-math.Cos(phi2),
+		math.Sin(m.config.Phi2),
+		-math.Cos(m.config.Phi2),
 		0,
 	})
 	b1 := mat.NewVecDense(3, []float64{
-		-math.Cos(phi1) * math.Sin(theta1),
-		-math.Sin(phi1) * math.Sin(theta1),
+		-math.Cos(m.config.Phi1) * math.Sin(theta1),
+		-math.Sin(m.config.Phi1) * math.Sin(theta1),
 		math.Cos(theta1),
 	})
 	b2 := mat.NewVecDense(3, []float64{
-		-math.Cos(phi2) * math.Sin(theta2),
-		-math.Sin(phi2) * math.Sin(theta2),
+		-math.Cos(m.config.Phi2) * math.Sin(theta2),
+		-math.Sin(m.config.Phi2) * math.Sin(theta2),
 		math.Cos(theta2),
 	})
 
@@ -195,17 +184,21 @@ func (model *Model) project(params *mat.VecDense, data []Snapshot) [][]float64 {
 		d1 := mat.NewVecDense(3, nil)
 		d1.AddScaledVec(d1, snap.p1, a1)
 		d1.AddScaledVec(d1, snap.q1, b1)
-		d1.AddScaledVec(n1, k, d1)
-		t1 := (z0 - model.c1.At(2, 0)) / d1.At(2, 0)
+		d1.AddScaledVec(n1, m.config.K, d1)
+		t1 := -z1 / d1.At(2, 0)
 
 		d2 := mat.NewVecDense(3, nil)
 		d2.AddScaledVec(d2, snap.p2, a2)
 		d2.AddScaledVec(d2, snap.q2, b2)
-		d2.AddScaledVec(n2, k, d2)
-		t2 := (z0 - model.c2.At(2, 0)) / d2.At(2, 0)
+		d2.AddScaledVec(n2, m.config.K, d2)
+		t2 := -z2 / d2.At(2, 0)
 
-		d1.AddScaledVec(model.c1, t1, d1)
-		d2.AddScaledVec(model.c2, t2, d2)
+		d1.AddScaledVec(mat.NewVecDense(3, []float64{
+			0, 0, z1,
+		}), t1, d1)
+		d2.AddScaledVec(mat.NewVecDense(3, []float64{
+			0, -1, z2,
+		}), t2, d2)
 
 		// x1, y1, x2, y2
 		ret[i] = []float64{
@@ -262,7 +255,7 @@ func (m Model) Plot2D(outDir, fileName string) {
 	}
 	for _, v := range data {
 		ploti1, err := plotter.NewLine(plotter.XYs{
-			{X: m.c1.At(0, 0), Y: m.c1.At(1, 0)},
+			{X: 0, Y: 0},
 			{X: v[0], Y: v[1]},
 		})
 		if err != nil {
@@ -272,7 +265,7 @@ func (m Model) Plot2D(outDir, fileName string) {
 		p.Add(ploti1)
 
 		ploti2, err := plotter.NewLine(plotter.XYs{
-			{X: m.c2.At(0, 0), Y: m.c2.At(1, 0)},
+			{X: 0, Y: -1},
 			{X: v[2], Y: v[3]},
 		})
 		if err != nil {
@@ -293,10 +286,10 @@ func (m Model) Plot2D(outDir, fileName string) {
 	}
 
 	p.Add(plotter.NewGrid())
-	p.X.Max = 3
-	p.X.Min = -0.2
-	p.Y.Max = 1
-	p.Y.Min = -2
+	// p.X.Max = 3
+	// p.X.Min = -0.2
+	// p.Y.Max = 1
+	// p.Y.Min = -2
 
 	if err := p.Save(vg.Inch*30, vg.Inch*30, fmt.Sprintf("%s/%s.png", outDir, fileName)); err != nil {
 		panic(err)
@@ -310,8 +303,7 @@ func (m Model) GetPointsDistance(params *mat.VecDense) float64 {
 		x1, y1, x2, y2 := p[0], p[1], p[2], p[3]
 		sum += (x1-x2)*(x1-x2) + (y1-y2)*(y1-y2)
 	}
-	k := params.At(4, 0)
-	return sum / (k * k)
+	return sum / (m.config.K * m.config.K)
 }
 
 func MaxInt(nums ...int64) int64 {
