@@ -52,10 +52,10 @@ func Extract(bucketName string, objName string) AnnotationResults {
 	// Translate AnnotateVideoResponse to Trajectory object
 	annots := res.AnnotationResults[0].PersonDetectionAnnotations
 	var ret AnnotationResults
-	ret.trajectories = make([]Trajectory, len(annots))
+	ret.Trajectories = make([]Trajectory, len(annots))
 	for i, annot := range annots {
 		track := annot.Tracks[0]
-		tj := &ret.trajectories[i]
+		tj := &ret.Trajectories[i]
 		tj.plots = make([]ScreenPlot, MaxDur)
 		tj.conf = track.Confidence
 		tj.start = track.Segment.StartTimeOffset.AsDuration().Milliseconds() / 100
@@ -71,8 +71,8 @@ func Extract(bucketName string, objName string) AnnotationResults {
 		}
 		tj.length = tj.calcLength()
 	}
-	sort.Slice(ret.trajectories, func(i, j int) bool {
-		return ret.trajectories[i].length > ret.trajectories[j].length
+	sort.Slice(ret.Trajectories, func(i, j int) bool {
+		return ret.Trajectories[i].length > ret.Trajectories[j].length
 	})
 	return ret
 }
@@ -103,7 +103,7 @@ func (ar AnnotationResults) Plot(outDir, fileName string) {
 
 	p.Add(plotter.NewGrid())
 
-	for i, tj := range ar.trajectories[:20] {
+	for i, tj := range ar.Trajectories[:20] {
 		plots := make(plotter.XYs, len(tj.Trimmedplots()))
 		for i, v := range tj.Trimmedplots() {
 			plots[i].X = v.p
@@ -129,5 +129,5 @@ func (ar AnnotationResults) Plot(outDir, fileName string) {
 }
 
 func (ar AnnotationResults) At(index int) Trajectory {
-	return ar.trajectories[index]
+	return ar.Trajectories[index]
 }

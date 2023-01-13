@@ -20,6 +20,7 @@ type ScreenPlot struct {
 
 type Config struct {
 	Phi1, Phi2, K1, K2, L float64
+	C1, C2                mat.VecDense
 }
 
 type Model struct {
@@ -35,7 +36,7 @@ type Trajectory struct {
 }
 
 type AnnotationResults struct {
-	trajectories []Trajectory
+	Trajectories []Trajectory
 }
 
 func (sc ScreenPlot) MarshalJSON() ([]byte, error) {
@@ -93,22 +94,5 @@ func (tj *Trajectory) UnmarshalJSON(b []byte) error {
 	tj.start = tj2.Start
 	tj.end = tj2.End
 	tj.length = tj2.Length
-	return err
-}
-
-func (ar AnnotationResults) MarshalJSON() ([]byte, error) {
-	v := &struct {
-		Trajectories []Trajectory `json:"trajectories"`
-	}{ar.trajectories}
-	s, err := json.Marshal(v)
-	return s, err
-}
-
-func (ar *AnnotationResults) UnmarshalJSON(b []byte) error {
-	ar2 := &struct {
-		Trajectories []Trajectory `json:"trajectories"`
-	}{}
-	err := json.Unmarshal(b, ar2)
-	ar.trajectories = ar2.Trajectories
 	return err
 }
