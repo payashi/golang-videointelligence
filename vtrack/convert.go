@@ -13,13 +13,6 @@ import (
 	"gonum.org/v1/plot/vg"
 )
 
-type ThreeDimensionalPlots struct {
-	loss  float64
-	size  int
-	plots *mat.Dense
-	i, j  int
-}
-
 func Plot(outDir, fileName string, tdps []ThreeDimensionalPlots) {
 	p := plot.New()
 	for _, tdp := range tdps {
@@ -44,12 +37,16 @@ func Plot(outDir, fileName string, tdps []ThreeDimensionalPlots) {
 }
 
 func (m Model) Idenitfy(ar1, ar2 AnnotationResults) []ThreeDimensionalPlots {
-	const MinSize int = 10
+	const MinSize int = 20
 	const MaxLoss float64 = 0.1
+	const MinConf float32 = 0.4
 	ret := make([]ThreeDimensionalPlots, 0)
 	for i, tj1 := range ar1.Trajectories {
+		if tj1.conf < MinConf {
+			continue
+		}
 		for j, tj2 := range ar2.Trajectories {
-			if i != 0 || j != 10 {
+			if tj2.conf < MinConf {
 				continue
 			}
 			pl, err := NewSyncedPlots(tj1, tj2)
@@ -110,7 +107,7 @@ func (m Model) Convert(plots *SyncedPlots) (*mat.Dense, float64) {
 	c21 := mat.NewVecDense(3, nil)
 	c21.SubVec(&m.config.C2, &m.config.C1)
 
-	ret := mat.NewDense(plots.size, 3, nil)
+	avgz := .0
 	loss := .0
 	for i := 0; i < plots.size; i++ {
 		pl1 := plots.pl1[i]
@@ -145,17 +142,20 @@ func (m Model) Convert(plots *SyncedPlots) (*mat.Dense, float64) {
 		l1.AddScaledVec(&m.config.C1, t.At(0, 0), d1)
 		l2 := mat.NewVecDense(3, nil)
 		l2.AddScaledVec(&m.config.C2, t.At(1, 0), d2)
-		// Mid Vector
-		lm := mat.NewVecDense(3, nil)
-		lm.AddVec(l1, l2)
-		lm.ScaleVec(0.5, lm)
-		ret.SetRow(i, lm.RawVector().Data)
+		// Mid z
+		avgz += (l1.At(2, 0) + l2.At(2, 0)) * 0.5
 
 		// Diff Vector
 		ld := mat.NewVecDense(3, nil)
 		ld.SubVec(l1, l2)
 		loss += ld.Norm(2)
 	}
+	avgz /= float64(plots.size)
 	loss /= float64(plots.size)
+
+	m1, m2 := m.project(m.params, avgz, plots)
+	ret := mat.NewDense(plots.size, 3, nil)
+	ret.Add(m1, m2)
+	ret.Scale(0.5, ret)
 	return ret, loss
 }

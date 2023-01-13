@@ -10,8 +10,9 @@ const AspectRatio float64 = 16. / 9.
 const MaxDur int = 601 // time range
 
 type SyncedPlots struct {
-	pl1, pl2 []ScreenPlot
-	size     int
+	pl1, pl2   []ScreenPlot
+	start, end int
+	size       int
 }
 
 type ScreenPlot struct {
@@ -19,8 +20,8 @@ type ScreenPlot struct {
 }
 
 type Config struct {
-	Phi1, Phi2, K1, K2, L float64
-	C1, C2                mat.VecDense
+	Phi1, Phi2, K1, K2 float64
+	C1, C2             mat.VecDense
 }
 
 type Model struct {
@@ -37,6 +38,13 @@ type Trajectory struct {
 
 type AnnotationResults struct {
 	Trajectories []Trajectory
+}
+
+type ThreeDimensionalPlots struct {
+	loss  float64
+	size  int
+	plots *mat.Dense
+	i, j  int
 }
 
 func (sc ScreenPlot) MarshalJSON() ([]byte, error) {
@@ -94,5 +102,53 @@ func (tj *Trajectory) UnmarshalJSON(b []byte) error {
 	tj.start = tj2.Start
 	tj.end = tj2.End
 	tj.length = tj2.Length
+	return err
+}
+
+func (m Model) MarshalJSON() ([]byte, error) {
+	v := &struct {
+		Theta1 float64   `json:"theta1"`
+		Theta2 float64   `json:"theta2"`
+		Phi1   float64   `json:"phi1"`
+		Phi2   float64   `json:"phi2"`
+		K1     float64   `json:"k1"`
+		K2     float64   `json:"k2"`
+		C1     []float64 `json:"c1"`
+		C2     []float64 `json:"c2"`
+	}{
+		Theta1: m.params.At(0, 0),
+		Theta2: m.params.At(1, 0),
+		Phi1: m.config.Phi1,
+		Phi2: m.config.Phi2,
+		K1: m.config.K1,
+		K2: m.config.K2,
+		C1: m.config.C1.RawVector().Data,
+		C2: m.config.C2.RawVector().Data,
+	}
+	s, err := json.Marshal(v)
+	return s, err
+}
+
+func (m *Model) UnmarshalJSON(b []byte) error {
+	m2 := &struct {
+		Theta1 float64   `json:"theta1"`
+		Theta2 float64   `json:"theta2"`
+		Phi1   float64   `json:"phi1"`
+		Phi2   float64   `json:"phi2"`
+		K1     float64   `json:"k1"`
+		K2     float64   `json:"k2"`
+		C1     []float64 `json:"c1"`
+		C2     []float64 `json:"c2"`
+	}{}
+	err := json.Unmarshal(b, m2)
+	m.params = mat.NewVecDense(2, []float64{m2.Theta1, m2.Theta2})
+	m.config = Config{
+		Phi1: m2.Phi1,
+		Phi2: m2.Phi2,
+		K1: m2.K1,
+		K2: m2.K2,
+		C1: *mat.NewVecDense(3, m2.C1),
+		C2: *mat.NewVecDense(3, m2.C2),
+	}
 	return err
 }

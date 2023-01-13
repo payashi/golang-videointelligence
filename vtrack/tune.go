@@ -31,34 +31,36 @@ func NewSyncedPlots(tj1, tj2 Trajectory) (*SyncedPlots, error) {
 	pl1 := tj1.plots[start : end+1]
 	pl2 := tj2.plots[start : end+1]
 	return &SyncedPlots{
-		size: len(pl1),
-		pl1:  pl1,
-		pl2:  pl2,
+		size:  len(pl1),
+		start: int(start),
+		end:   int(end),
+		pl1:   pl1,
+		pl2:   pl2,
 	}, nil
 }
 
 func (m *Model) Tune(
-	plots *SyncedPlots,
-	dp, mu float64,
 	ntrials int,
+	dp, mu, z0 float64,
+	plots *SyncedPlots,
 ) {
 	for i := 0; i < ntrials; i++ {
 		// Update phi
-		phi1, phi2 := m.getPhis(plots)
+		phi1, phi2 := m.getPhis(z0, plots)
 		m.config.Phi1 += phi1
 		m.config.Phi2 += phi2
 
 		inc := mat.NewVecDense(m.params.Len(), nil)
 		// Update theta
 		for j := 0; j < m.params.Len(); j++ {
-			inc.SetVec(j, -m.getDiff(j, dp, plots))
+			inc.SetVec(j, -m.getDiff(j, dp, z0, plots))
 		}
 		inc.ScaleVec(1/inc.Norm(2), inc)
 		m.params.AddScaledVec(m.params, mu*math.Exp(-4*float64(i)/float64(ntrials)), inc)
 	}
 }
 
-func (m Model) Plot(outDir, fileName string, plots *SyncedPlots) {
+func (m Model) Plot(outDir, fileName string, z0 float64, plots *SyncedPlots) {
 	p := plot.New()
 
 	corners := []ScreenPlot{
@@ -68,7 +70,7 @@ func (m Model) Plot(outDir, fileName string, plots *SyncedPlots) {
 		{-0.5, 0.},                 // mid left
 	}
 
-	fm1, fm2 := m.project(m.params, &SyncedPlots{
+	fm1, fm2 := m.project(m.params, z0, &SyncedPlots{
 		size: len(corners),
 		pl1:  corners,
 		pl2:  corners,
@@ -106,7 +108,7 @@ func (m Model) Plot(outDir, fileName string, plots *SyncedPlots) {
 		p.Add(ploti2)
 	}
 
-	m1, m2 := m.project(m.params, plots)
+	m1, m2 := m.project(m.params, z0, plots)
 	for i := 0; i < plots.size; i++ {
 		ploti1, err := plotter.NewLine(plotter.XYs{
 			{X: m.config.C1.At(0, 0), Y: m.config.C1.At(1, 0)},
@@ -173,8 +175,8 @@ func (m Model) PrintParams(blender bool) {
 	}
 }
 
-func (m Model) getPhis(plots *SyncedPlots) (float64, float64) { // phi1, phi2
-	m1, m2 := m.project(m.params, &SyncedPlots{
+func (m Model) getPhis(z0 float64, plots *SyncedPlots) (float64, float64) { // phi1, phi2
+	m1, m2 := m.project(m.params, z0, &SyncedPlots{
 		size: 2,
 		pl1:  []ScreenPlot{plots.pl1[0], plots.pl1[plots.size-1]},
 		pl2:  []ScreenPlot{plots.pl2[0], plots.pl2[plots.size-1]},
@@ -211,16 +213,16 @@ func (m Model) getPhis(plots *SyncedPlots) (float64, float64) { // phi1, phi2
 	return phi1, phi2
 }
 
-func (m *Model) getDiff(i int, dp float64, plots *SyncedPlots) float64 {
-	cv := m.getPointsDistance(m.params, plots)
+func (m *Model) getDiff(i int, dp, z0 float64, plots *SyncedPlots) float64 {
+	cv := m.getPointsDistance(m.params, z0, plots)
 	nparams := mat.NewVecDense(m.params.Len(), nil)
 	nparams.SetVec(i, dp)
 	nparams.AddVec(m.params, nparams)
-	nv := m.getPointsDistance(nparams, plots)
+	nv := m.getPointsDistance(nparams, z0, plots)
 	return (nv - cv) / dp
 }
 
-func (m *Model) project(params *mat.VecDense, plots *SyncedPlots) (*mat.Dense, *mat.Dense) {
+func (m *Model) project(params *mat.VecDense, z0 float64, plots *SyncedPlots) (*mat.Dense, *mat.Dense) {
 	theta1, theta2 := params.At(0, 0), params.At(1, 0)
 
 	n1 := mat.NewVecDense(3, []float64{
@@ -265,13 +267,13 @@ func (m *Model) project(params *mat.VecDense, plots *SyncedPlots) (*mat.Dense, *
 		d1.AddScaledVec(d1, pl1.p, a1)
 		d1.AddScaledVec(d1, pl1.q, b1)
 		d1.AddScaledVec(n1, m.config.K1, d1)
-		t1 := -m.config.C1.At(2, 0) / d1.At(2, 0)
+		t1 := (z0 - m.config.C1.At(2, 0)) / d1.At(2, 0)
 
 		d2 := mat.NewVecDense(3, nil)
 		d2.AddScaledVec(d2, pl2.p, a2)
 		d2.AddScaledVec(d2, pl2.q, b2)
 		d2.AddScaledVec(n2, m.config.K2, d2)
-		t2 := -m.config.C2.At(2, 0) / d2.At(2, 0)
+		t2 := (z0 - m.config.C2.At(2, 0)) / d2.At(2, 0)
 
 		d1.AddScaledVec(&m.config.C1, t1, d1)
 		d2.AddScaledVec(&m.config.C2, t2, d2)
@@ -282,8 +284,8 @@ func (m *Model) project(params *mat.VecDense, plots *SyncedPlots) (*mat.Dense, *
 	return ret1, ret2
 }
 
-func (m Model) getPointsDistance(params *mat.VecDense, plots *SyncedPlots) float64 {
-	m1, m2 := m.project(params, plots)
+func (m Model) getPointsDistance(params *mat.VecDense, z0 float64, plots *SyncedPlots) float64 {
+	m1, m2 := m.project(params, z0, plots)
 
 	sum := .0
 	for i := 0; i < plots.size; i++ {
