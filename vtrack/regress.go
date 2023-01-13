@@ -19,13 +19,13 @@ func NewModel(tj1, tj2 Trajectory, params *mat.VecDense, config Config) *Model {
 	if start > end {
 		log.Fatal("These Trajectories have no common segments.")
 	}
-	tr1 := tj1.plots[start : end+1]
-	tr2 := tj2.plots[start : end+1]
+	pl1 := tj1.plots[start : end+1]
+	pl2 := tj2.plots[start : end+1]
 	m := new(Model)
-	m.ndata = int(end - start + 1) // the number of datasets
-	m.Data = make([]Snapshot, m.ndata)
-	for i := 0; i < m.ndata; i++ {
-		m.Data[i] = Snapshot{tr1[i], tr2[i]}
+	m.Data = SyncedPlots{
+		size: len(pl1),
+		pl1:  pl1,
+		pl2:  pl2,
 	}
 	m.params = params
 	m.nparams = params.Len()
@@ -54,15 +54,17 @@ func (m Model) Plot(outDir, fileName string) {
 	data := m.project(m.params, m.Data)
 	p := plot.New()
 
-	frame := m.project(m.params, []Snapshot{
-		// bottom left
-		{ScreenCoordinate{-0.5, -0.5 / AspectRatio}, ScreenCoordinate{-0.5, -0.5 / AspectRatio}},
-		// bottom right
-		{ScreenCoordinate{+0.5, -0.5 / AspectRatio}, ScreenCoordinate{+0.5, -0.5 / AspectRatio}},
-		// mid right
-		{ScreenCoordinate{+0.5, 0.}, ScreenCoordinate{+0.5, 0.}},
-		// mid left
-		{ScreenCoordinate{-0.5, 0.}, ScreenCoordinate{-0.5, 0.}},
+	corners := []ScreenPlot{
+		{-0.5, -0.5 / AspectRatio}, // bottom left
+		{+0.5, -0.5 / AspectRatio}, // bottom right
+		{+0.5, 0.},                 // mid right
+		{-0.5, 0.},                 // mid left
+	}
+
+	frame := m.project(m.params, SyncedPlots{
+		size: len(corners),
+		pl1:  corners,
+		pl2:  corners,
 	})
 	for i := 0; i < len(frame); i++ {
 		f1 := frame[i]
@@ -136,7 +138,7 @@ func (m Model) Plot(outDir, fileName string) {
 	}
 }
 
-func (m Model) Convert(snaps []Snapshot) []*mat.VecDense {
+func (m Model) Convert(plots SyncedPlots) []*mat.VecDense {
 	theta1, theta2 := m.params.At(0, 0), m.params.At(1, 0)
 	z1, z2 := m.params.At(2, 0), m.params.At(3, 0)
 
@@ -171,18 +173,21 @@ func (m Model) Convert(snaps []Snapshot) []*mat.VecDense {
 		math.Cos(theta2),
 	})
 
-	ret := make([]*mat.VecDense, len(snaps))
+	ret := make([]*mat.VecDense, plots.size)
 	c1 := mat.NewVecDense(3, []float64{0, 0, z1})
 	c2 := mat.NewVecDense(3, []float64{0, -m.config.L, z2})
-	for i, snap := range snaps {
+	for i := 0; i < plots.size; i++ {
+		pl1 := plots.pl1[i]
+		pl2 := plots.pl2[i]
+
 		d1 := mat.NewVecDense(3, nil)
-		d1.AddScaledVec(d1, snap.sc1.p, a1)
-		d1.AddScaledVec(d1, snap.sc1.q, b1)
+		d1.AddScaledVec(d1, pl1.p, a1)
+		d1.AddScaledVec(d1, pl1.q, b1)
 		d1.AddScaledVec(n1, m.config.K1, d1)
 
 		d2 := mat.NewVecDense(3, nil)
-		d2.AddScaledVec(d2, snap.sc2.p, a2)
-		d2.AddScaledVec(d2, snap.sc2.q, b2)
+		d2.AddScaledVec(d2, pl2.p, a2)
+		d2.AddScaledVec(d2, pl2.q, b2)
 		d2.AddScaledVec(n2, m.config.K2, d2)
 
 		mata := mat.NewDense(2, 2, []float64{
@@ -245,7 +250,11 @@ func (m Model) PrintParams(blender bool) {
 }
 
 func (m Model) getPhis() (float64, float64) { // phi1, phi2
-	data := m.project(m.params, []Snapshot{m.Data[0], m.Data[m.ndata-1]})
+	data := m.project(m.params, SyncedPlots{
+		size: 2,
+		pl1:  []ScreenPlot{m.Data.pl1[0], m.Data.pl1[m.Data.size-1]},
+		pl2:  []ScreenPlot{m.Data.pl2[0], m.Data.pl2[m.Data.size-1]},
+	})
 	l1 := []float64{data[1][0] - data[0][0], data[1][1] - data[0][1]}
 	l2 := []float64{data[1][2] - data[0][2], data[1][3] - data[0][3]}
 	var phi1, phi2 float64
@@ -283,7 +292,7 @@ func (m *Model) getDiff(i int, dp float64) float64 {
 	return (nv - cv) / dp
 }
 
-func (m *Model) project(params *mat.VecDense, data []Snapshot) [][]float64 {
+func (m *Model) project(params *mat.VecDense, plots SyncedPlots) [][]float64 {
 	theta1, theta2 := params.At(0, 0), params.At(1, 0)
 	z1, z2 := params.At(2, 0), params.At(3, 0)
 
@@ -318,19 +327,21 @@ func (m *Model) project(params *mat.VecDense, data []Snapshot) [][]float64 {
 		math.Cos(theta2),
 	})
 
-	ret := make([][]float64, len(data))
+	ret := make([][]float64, plots.size)
 
-	for i := 0; i < len(data); i++ {
-		snap := data[i]
+	for i := 0; i < plots.size; i++ {
+		pl1 := plots.pl1[i]
+		pl2 := plots.pl2[i]
+
 		d1 := mat.NewVecDense(3, nil)
-		d1.AddScaledVec(d1, snap.sc1.p, a1)
-		d1.AddScaledVec(d1, snap.sc1.q, b1)
+		d1.AddScaledVec(d1, pl1.p, a1)
+		d1.AddScaledVec(d1, pl1.q, b1)
 		d1.AddScaledVec(n1, m.config.K1, d1)
 		t1 := -z1 / d1.At(2, 0)
 
 		d2 := mat.NewVecDense(3, nil)
-		d2.AddScaledVec(d2, snap.sc2.p, a2)
-		d2.AddScaledVec(d2, snap.sc2.q, b2)
+		d2.AddScaledVec(d2, pl2.p, a2)
+		d2.AddScaledVec(d2, pl2.q, b2)
 		d2.AddScaledVec(n2, m.config.K2, d2)
 		t2 := -z2 / d2.At(2, 0)
 

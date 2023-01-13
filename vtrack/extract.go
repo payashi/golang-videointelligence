@@ -56,7 +56,7 @@ func Extract(bucketName string, objName string) AnnotationResults {
 	for i, annot := range annots {
 		track := annot.Tracks[0]
 		tj := &ret.trajectories[i]
-		tj.plots = make([]ScreenCoordinate, MaxDur)
+		tj.plots = make([]ScreenPlot, MaxDur)
 		tj.conf = track.Confidence
 		tj.start = track.Segment.StartTimeOffset.AsDuration().Milliseconds() / 100
 		tj.end = track.Segment.EndTimeOffset.AsDuration().Milliseconds() / 100
@@ -64,7 +64,7 @@ func Extract(bucketName string, objName string) AnnotationResults {
 		for _, tsobj := range track.TimestampedObjects {
 			box := tsobj.NormalizedBoundingBox
 			tidx := tsobj.TimeOffset.AsDuration().Milliseconds() / 100
-			tj.plots[tidx] = ScreenCoordinate{
+			tj.plots[tidx] = ScreenPlot{
 				float64((box.Left+box.Right)/2) - 0.5,
 				(0.5 - float64(box.Top)) / AspectRatio,
 			}
@@ -77,7 +77,7 @@ func Extract(bucketName string, objName string) AnnotationResults {
 	return ret
 }
 
-func (tj Trajectory) Trimmedplots() []ScreenCoordinate {
+func (tj Trajectory) Trimmedplots() []ScreenPlot {
 	return tj.plots[tj.start : tj.end+1]
 
 }

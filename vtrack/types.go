@@ -9,11 +9,12 @@ import (
 const AspectRatio float64 = 16. / 9.
 const MaxDur int = 601 // time range
 
-type Snapshot struct {
-	sc1, sc2 ScreenCoordinate
+type SyncedPlots struct {
+	pl1, pl2 []ScreenPlot
+	size     int
 }
 
-type ScreenCoordinate struct {
+type ScreenPlot struct {
 	p, q float64
 }
 
@@ -22,25 +23,24 @@ type Config struct {
 }
 
 type Model struct {
-	nparams, ndata int
-	params         *mat.VecDense
-	config         Config
-	Data           []Snapshot
+	nparams int
+	params  *mat.VecDense
+	config  Config
+	Data    SyncedPlots
 }
 
 type Trajectory struct {
-	conf          float32
-	plots         []ScreenCoordinate
-	start, end    int64
-	length        float64
-	width, height float64
+	conf       float32
+	plots      []ScreenPlot
+	start, end int64
+	length     float64
 }
 
 type AnnotationResults struct {
 	trajectories []Trajectory
 }
 
-func (sc ScreenCoordinate) MarshalJSON() ([]byte, error) {
+func (sc ScreenPlot) MarshalJSON() ([]byte, error) {
 	v := &struct {
 		P float64 `json:"p"`
 		Q float64 `json:"q"`
@@ -52,7 +52,7 @@ func (sc ScreenCoordinate) MarshalJSON() ([]byte, error) {
 	return s, err
 }
 
-func (sc *ScreenCoordinate) UnmarshalJSON(b []byte) error {
+func (sc *ScreenPlot) UnmarshalJSON(b []byte) error {
 	sc2 := &struct {
 		P float64 `json:"p"`
 		Q float64 `json:"q"`
@@ -65,21 +65,17 @@ func (sc *ScreenCoordinate) UnmarshalJSON(b []byte) error {
 
 func (tj Trajectory) MarshalJSON() ([]byte, error) {
 	v := &struct {
-		Conf   float32            `json:"conf"`
-		Plots  []ScreenCoordinate `json:"plots"`
-		Start  int64              `json:"start"`
-		End    int64              `json:"end"`
-		Length float64            `json:"length"`
-		Width  float64            `json:"width"`
-		Height float64            `json:"height"`
+		Conf   float32      `json:"conf"`
+		Plots  []ScreenPlot `json:"plots"`
+		Start  int64        `json:"start"`
+		End    int64        `json:"end"`
+		Length float64      `json:"length"`
 	}{
 		Conf:   tj.conf,
 		Plots:  tj.plots,
 		Start:  tj.start,
 		End:    tj.end,
 		Length: tj.length,
-		Width:  tj.width,
-		Height: tj.height,
 	}
 	s, err := json.Marshal(v)
 	return s, err
@@ -87,13 +83,11 @@ func (tj Trajectory) MarshalJSON() ([]byte, error) {
 
 func (tj *Trajectory) UnmarshalJSON(b []byte) error {
 	tj2 := &struct {
-		Conf   float32            `json:"conf"`
-		Plots  []ScreenCoordinate `json:"plots"`
-		Start  int64              `json:"start"`
-		End    int64              `json:"end"`
-		Length float64            `json:"length"`
-		Width  float64            `json:"width"`
-		Height float64            `json:"height"`
+		Conf   float32      `json:"conf"`
+		Plots  []ScreenPlot `json:"plots"`
+		Start  int64        `json:"start"`
+		End    int64        `json:"end"`
+		Length float64      `json:"length"`
 	}{}
 	err := json.Unmarshal(b, tj2)
 	tj.conf = tj2.Conf
@@ -101,8 +95,6 @@ func (tj *Trajectory) UnmarshalJSON(b []byte) error {
 	tj.start = tj2.Start
 	tj.end = tj2.End
 	tj.length = tj2.Length
-	tj.width = tj2.Width
-	tj.height = tj2.Height
 	return err
 }
 
