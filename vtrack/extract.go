@@ -18,10 +18,10 @@ import (
 	"gonum.org/v1/plot/vg"
 )
 
-const AspectRatio float64 = 16 / 9
+const AspectRatio float64 = 16. / 9.
 const MaxDur int = 601 // time range
 
-func Extract(bucketName string, objName string, plot bool) AnnotationResults {
+func Extract(bucketName string, objName string) AnnotationResults {
 	// Download a json file
 	ctx := context.Background()
 	client, err := storage.NewClient(ctx)
@@ -77,9 +77,6 @@ func Extract(bucketName string, objName string, plot bool) AnnotationResults {
 	sort.Slice(ret.trajectories, func(i, j int) bool {
 		return ret.trajectories[i].length > ret.trajectories[j].length
 	})
-	if plot {
-		ret.Plot(objName)
-	}
 	return ret
 }
 
@@ -111,7 +108,7 @@ func (tj Trajectory) calcLength() float64 {
 	return ret
 }
 
-func (ar AnnotationResults) Plot(fileName string) {
+func (ar AnnotationResults) Plot(outDir, fileName string) {
 	p := plot.New()
 
 	// p.Title.Text = "Trajectories"
@@ -145,7 +142,7 @@ func (ar AnnotationResults) Plot(fileName string) {
 	pwidth := 6 * vg.Inch
 	pheight, _ := vg.ParseLength(fmt.Sprintf("%.2fin", 6/AspectRatio))
 
-	if err := p.Save(pwidth, pheight, fmt.Sprintf("%s.png", fileName)); err != nil {
+	if err := p.Save(pwidth, pheight, fmt.Sprintf("%s/%s.png", outDir, fileName)); err != nil {
 		panic(err)
 	}
 }

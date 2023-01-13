@@ -19,7 +19,10 @@ var objName2 = "2022-12-07-0300-2t"
 func main() {
 	ar1 := getAnnotationResults(objName1)
 	ar2 := getAnnotationResults(objName2)
-	model := vtrack.NewModel(ar1.At(0), ar2.At(10),
+	ar1.Plot(outDir, objName1)
+	ar2.Plot(outDir, objName2)
+
+	model := vtrack.NewModel(ar1.At(0), ar2.At(9),
 		mat.NewVecDense(4, []float64{ // params
 			-0.01 * math.Pi, -0.01 * math.Pi, // theta1, theta2
 			2.3, 2.2, // z1, z2
@@ -60,7 +63,7 @@ func getAnnotationResults(objName string) vtrack.AnnotationResults {
 		return ret
 	} else {
 		fmt.Printf("Fetching %s...\n", objName)
-		ar := vtrack.Extract(bucketName, objName, false)
+		ar := vtrack.Extract(bucketName, objName)
 
 		// Save on local
 		newFile, err := json.MarshalIndent(ar, "", "\t")

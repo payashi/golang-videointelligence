@@ -40,13 +40,9 @@ func NewModel(tj1, tj2 Trajectory, params *mat.VecDense, config Config) *Model {
 	m.ndata = int(end - start + 1) // the number of datasets
 	m.Data = make([]Snapshot, m.ndata)
 	for i := 0; i < m.ndata; i++ {
-		p1, q1 := tr1[i][0]/tj1.width, tr1[i][1]/tj1.height
-		p2, q2 := tr2[i][0]/tj2.width, tr2[i][1]/tj2.height
 		m.Data[i] = Snapshot{
-			p1 - 0.5,
-			p2 - 0.5,
-			(q1 - 0.5) * (tj1.height / tj1.width),
-			(q2 - 0.5) * (tj2.height / tj2.width),
+			tr1[i][0], tr2[i][0],
+			tr1[i][1], tr2[i][1],
 		}
 	}
 	m.params = params
@@ -149,10 +145,6 @@ func (m Model) Plot(outDir, fileName string) {
 	}
 
 	p.Add(plotter.NewGrid())
-	// p.X.Max = 3
-	// p.X.Min = -0.2
-	// p.Y.Max = 1
-	// p.Y.Min = -2
 
 	if err := p.Save(vg.Inch*30, vg.Inch*30, fmt.Sprintf("%s/%s.png", outDir, fileName)); err != nil {
 		panic(err)
