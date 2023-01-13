@@ -22,7 +22,7 @@ func main() {
 	ar1.Plot(outDir, objName1)
 	ar2.Plot(outDir, objName2)
 
-	model := vtrack.NewModel(ar1.At(0), ar2.At(9),
+	model := vtrack.NewModel(ar1.At(0), ar2.At(10),
 		mat.NewVecDense(4, []float64{ // params
 			-0.01 * math.Pi, -0.01 * math.Pi, // theta1, theta2
 			2.3, 2.2, // z1, z2

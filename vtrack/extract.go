@@ -18,9 +18,6 @@ import (
 	"gonum.org/v1/plot/vg"
 )
 
-const AspectRatio float64 = 16. / 9.
-const MaxDur int = 601 // time range
-
 func Extract(bucketName string, objName string) AnnotationResults {
 	// Download a json file
 	ctx := context.Background()
@@ -59,7 +56,7 @@ func Extract(bucketName string, objName string) AnnotationResults {
 	for i, annot := range annots {
 		track := annot.Tracks[0]
 		tj := &ret.trajectories[i]
-		tj.plots = make([][]float64, MaxDur)
+		tj.plots = make([]ScreenCoordinate, MaxDur)
 		tj.conf = track.Confidence
 		tj.start = track.Segment.StartTimeOffset.AsDuration().Milliseconds() / 100
 		tj.end = track.Segment.EndTimeOffset.AsDuration().Milliseconds() / 100
@@ -67,7 +64,7 @@ func Extract(bucketName string, objName string) AnnotationResults {
 		for _, tsobj := range track.TimestampedObjects {
 			box := tsobj.NormalizedBoundingBox
 			tidx := tsobj.TimeOffset.AsDuration().Milliseconds() / 100
-			tj.plots[tidx] = []float64{
+			tj.plots[tidx] = ScreenCoordinate{
 				float64((box.Left+box.Right)/2) - 0.5,
 				(0.5 - float64(box.Top)) / AspectRatio,
 			}
@@ -80,19 +77,7 @@ func Extract(bucketName string, objName string) AnnotationResults {
 	return ret
 }
 
-type Trajectory struct {
-	conf          float32
-	plots         [][]float64
-	start, end    int64
-	length        float64
-	width, height float64
-}
-
-type AnnotationResults struct {
-	trajectories []Trajectory
-}
-
-func (tj Trajectory) Trimmedplots() [][]float64 {
+func (tj Trajectory) Trimmedplots() []ScreenCoordinate {
 	return tj.plots[tj.start : tj.end+1]
 
 }
@@ -100,9 +85,9 @@ func (tj Trajectory) Trimmedplots() [][]float64 {
 func (tj Trajectory) calcLength() float64 {
 	ret := .0
 	for i := int(tj.start); i < int(tj.end); i++ {
-		cx, cy := tj.plots[i][0], tj.plots[i][1]
-		nx, ny := tj.plots[i+1][0], tj.plots[i+1][1]
-		dist := math.Sqrt((nx-cx)*(nx-cx) + (ny-cy)*(ny-cy))
+		cp, cq := tj.plots[i].p, tj.plots[i].q
+		np, nq := tj.plots[i+1].p, tj.plots[i+1].q
+		dist := math.Sqrt((np-cp)*(np-cp) + (nq-cq)*(nq-cq))
 		ret += dist
 	}
 	return ret
@@ -110,10 +95,6 @@ func (tj Trajectory) calcLength() float64 {
 
 func (ar AnnotationResults) Plot(outDir, fileName string) {
 	p := plot.New()
-
-	// p.Title.Text = "Trajectories"
-	// p.X.Label.Text = "X"
-	// p.Y.Label.Text = "Y"
 
 	p.X.Min = -0.5
 	p.Y.Min = -0.5 / AspectRatio
@@ -125,8 +106,8 @@ func (ar AnnotationResults) Plot(outDir, fileName string) {
 	for i, tj := range ar.trajectories[:20] {
 		plots := make(plotter.XYs, len(tj.Trimmedplots()))
 		for i, v := range tj.Trimmedplots() {
-			plots[i].X = v[0]
-			plots[i].Y = v[1]
+			plots[i].X = v.p
+			plots[i].Y = v.q
 		}
 		ploti, err := plotter.NewScatter(plots)
 		if err != nil {
@@ -147,66 +128,6 @@ func (ar AnnotationResults) Plot(outDir, fileName string) {
 	}
 }
 
-func (tj Trajectory) MarshalJSON() ([]byte, error) {
-	v := &struct {
-		Conf   float32     `json:"conf"`
-		Plots  [][]float64 `json:"plots"`
-		Start  int64       `json:"start"`
-		End    int64       `json:"end"`
-		Length float64     `json:"length"`
-		Width  float64     `json:"width"`
-		Height float64     `json:"height"`
-	}{
-		Conf:   tj.conf,
-		Plots:  tj.plots,
-		Start:  tj.start,
-		End:    tj.end,
-		Length: tj.length,
-		Width:  tj.width,
-		Height: tj.height,
-	}
-	s, err := json.Marshal(v)
-	return s, err
-}
-
-func (tj *Trajectory) UnmarshalJSON(b []byte) error {
-	tj2 := &struct {
-		Conf   float32     `json:"conf"`
-		Plots  [][]float64 `json:"plots"`
-		Start  int64       `json:"start"`
-		End    int64       `json:"end"`
-		Length float64     `json:"length"`
-		Width  float64     `json:"width"`
-		Height float64     `json:"height"`
-	}{}
-	err := json.Unmarshal(b, tj2)
-	tj.conf = tj2.Conf
-	tj.plots = tj2.Plots
-	tj.start = tj2.Start
-	tj.end = tj2.End
-	tj.length = tj2.Length
-	tj.width = tj2.Width
-	tj.height = tj2.Height
-	return err
-}
-
 func (ar AnnotationResults) At(index int) Trajectory {
 	return ar.trajectories[index]
-}
-
-func (ar AnnotationResults) MarshalJSON() ([]byte, error) {
-	v := &struct {
-		Trajectories []Trajectory `json:"trajectories"`
-	}{ar.trajectories}
-	s, err := json.Marshal(v)
-	return s, err
-}
-
-func (ar *AnnotationResults) UnmarshalJSON(b []byte) error {
-	ar2 := &struct {
-		Trajectories []Trajectory `json:"trajectories"`
-	}{}
-	err := json.Unmarshal(b, ar2)
-	ar.trajectories = ar2.Trajectories
-	return err
 }

@@ -13,21 +13,6 @@ import (
 	"gonum.org/v1/plot/vg/draw"
 )
 
-type Snapshot struct {
-	p1, p2, q1, q2 float64
-}
-
-type Config struct {
-	Phi1, Phi2, K1, K2, L float64
-}
-
-type Model struct {
-	nparams, ndata int
-	params         *mat.VecDense
-	config         Config
-	Data           []Snapshot
-}
-
 func NewModel(tj1, tj2 Trajectory, params *mat.VecDense, config Config) *Model {
 	start := maxInt(tj1.start, tj2.start)
 	end := minInt(tj1.end, tj2.end)
@@ -40,10 +25,7 @@ func NewModel(tj1, tj2 Trajectory, params *mat.VecDense, config Config) *Model {
 	m.ndata = int(end - start + 1) // the number of datasets
 	m.Data = make([]Snapshot, m.ndata)
 	for i := 0; i < m.ndata; i++ {
-		m.Data[i] = Snapshot{
-			tr1[i][0], tr2[i][0],
-			tr1[i][1], tr2[i][1],
-		}
+		m.Data[i] = Snapshot{tr1[i], tr2[i]}
 	}
 	m.params = params
 	m.nparams = params.Len()
@@ -65,7 +47,6 @@ func (m *Model) BatchGradientDecent(dp, mu float64, ntrials int) {
 		}
 		inc.ScaleVec(1/inc.Norm(2), inc)
 		m.params.AddScaledVec(m.params, mu*math.Exp(-4*float64(i)/float64(ntrials)), inc)
-		// m.params.AddScaledVec(m.params, mu, inc)
 	}
 }
 
@@ -74,10 +55,14 @@ func (m Model) Plot(outDir, fileName string) {
 	p := plot.New()
 
 	frame := m.project(m.params, []Snapshot{
-		{-0.5, -0.5, -0.5 / AspectRatio, -0.5 / AspectRatio}, // bottom left
-		{+0.5, +0.5, -0.5 / AspectRatio, -0.5 / AspectRatio}, // bottom right
-		{+0.5, +0.5, +0., +0.},                               // mid right
-		{-0.5, -0.5, +0., +0.},                               // mid left
+		// bottom left
+		{ScreenCoordinate{-0.5, -0.5 / AspectRatio}, ScreenCoordinate{-0.5, -0.5 / AspectRatio}},
+		// bottom right
+		{ScreenCoordinate{+0.5, -0.5 / AspectRatio}, ScreenCoordinate{+0.5, -0.5 / AspectRatio}},
+		// mid right
+		{ScreenCoordinate{+0.5, 0.}, ScreenCoordinate{+0.5, 0.}},
+		// mid left
+		{ScreenCoordinate{-0.5, 0.}, ScreenCoordinate{-0.5, 0.}},
 	})
 	for i := 0; i < len(frame); i++ {
 		f1 := frame[i]
@@ -191,13 +176,13 @@ func (m Model) Convert(snaps []Snapshot) []*mat.VecDense {
 	c2 := mat.NewVecDense(3, []float64{0, -m.config.L, z2})
 	for i, snap := range snaps {
 		d1 := mat.NewVecDense(3, nil)
-		d1.AddScaledVec(d1, snap.p1, a1)
-		d1.AddScaledVec(d1, snap.q1, b1)
+		d1.AddScaledVec(d1, snap.sc1.p, a1)
+		d1.AddScaledVec(d1, snap.sc1.q, b1)
 		d1.AddScaledVec(n1, m.config.K1, d1)
 
 		d2 := mat.NewVecDense(3, nil)
-		d2.AddScaledVec(d2, snap.p2, a2)
-		d2.AddScaledVec(d2, snap.q2, b2)
+		d2.AddScaledVec(d2, snap.sc2.p, a2)
+		d2.AddScaledVec(d2, snap.sc2.q, b2)
 		d2.AddScaledVec(n2, m.config.K2, d2)
 
 		mata := mat.NewDense(2, 2, []float64{
@@ -338,14 +323,14 @@ func (m *Model) project(params *mat.VecDense, data []Snapshot) [][]float64 {
 	for i := 0; i < len(data); i++ {
 		snap := data[i]
 		d1 := mat.NewVecDense(3, nil)
-		d1.AddScaledVec(d1, snap.p1, a1)
-		d1.AddScaledVec(d1, snap.q1, b1)
+		d1.AddScaledVec(d1, snap.sc1.p, a1)
+		d1.AddScaledVec(d1, snap.sc1.q, b1)
 		d1.AddScaledVec(n1, m.config.K1, d1)
 		t1 := -z1 / d1.At(2, 0)
 
 		d2 := mat.NewVecDense(3, nil)
-		d2.AddScaledVec(d2, snap.p2, a2)
-		d2.AddScaledVec(d2, snap.q2, b2)
+		d2.AddScaledVec(d2, snap.sc2.p, a2)
+		d2.AddScaledVec(d2, snap.sc2.q, b2)
 		d2.AddScaledVec(n2, m.config.K2, d2)
 		t2 := -z2 / d2.At(2, 0)
 
