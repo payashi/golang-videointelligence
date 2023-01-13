@@ -63,6 +63,8 @@ func (m Model) Idenitfy(ar1, ar2 AnnotationResults) []ThreeDimensionalPlots {
 				loss:  loss,
 				size:  size,
 				plots: ps,
+				start: pl.start,
+				end:   pl.end,
 			})
 		}
 	}
