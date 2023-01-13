@@ -77,12 +77,11 @@ func (m Model) Plot(outDir, fileName string) {
 	data := m.project(m.params, m.Data)
 	p := plot.New()
 
-	ratio := Height / Width
 	frame := m.project(m.params, []Snapshot{
-		{-0.5, -0.5, -0.5 * ratio, -0.5 * ratio}, // bottom left
-		{+0.5, +0.5, -0.5 * ratio, -0.5 * ratio}, // bottom right
-		{+0.5, +0.5, +0., +0.},                   // mid right
-		{-0.5, -0.5, +0., +0.},                   // mid left
+		{-0.5, -0.5, -0.5 / AspectRatio, -0.5 / AspectRatio}, // bottom left
+		{+0.5, +0.5, -0.5 / AspectRatio, -0.5 / AspectRatio}, // bottom right
+		{+0.5, +0.5, +0., +0.},                               // mid right
+		{-0.5, -0.5, +0., +0.},                               // mid left
 	})
 	for i := 0; i < len(frame); i++ {
 		f1 := frame[i]

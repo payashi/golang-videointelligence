@@ -18,9 +18,8 @@ import (
 	"gonum.org/v1/plot/vg"
 )
 
-const Width float64 = 1280
-const Height float64 = 720
-const MaxDur int = 601
+const AspectRatio float64 = 16 / 9
+const MaxDur int = 601 // time range
 
 func Extract(bucketName string, objName string, plot bool) AnnotationResults {
 	// Download a json file
@@ -69,13 +68,11 @@ func Extract(bucketName string, objName string, plot bool) AnnotationResults {
 			box := tsobj.NormalizedBoundingBox
 			tidx := tsobj.TimeOffset.AsDuration().Milliseconds() / 100
 			tj.plots[tidx] = []float64{
-				float64((box.Left+box.Right)/2) * Width,
-				(1 - float64(box.Top)) * Height,
+				float64((box.Left+box.Right)/2) - 0.5,
+				(0.5 - float64(box.Top)) / AspectRatio,
 			}
 		}
 		tj.length = tj.calcLength()
-		tj.width = Width
-		tj.height = Height
 	}
 	sort.Slice(ret.trajectories, func(i, j int) bool {
 		return ret.trajectories[i].length > ret.trajectories[j].length
@@ -121,10 +118,10 @@ func (ar AnnotationResults) Plot(fileName string) {
 	// p.X.Label.Text = "X"
 	// p.Y.Label.Text = "Y"
 
-	p.X.Min = 0
-	p.Y.Min = 0
-	p.X.Max = Width
-	p.Y.Max = Height
+	p.X.Min = -0.5
+	p.Y.Min = -0.5 / AspectRatio
+	p.X.Max = +0.5
+	p.Y.Max = +0.5 / AspectRatio
 
 	p.Add(plotter.NewGrid())
 
@@ -146,7 +143,7 @@ func (ar AnnotationResults) Plot(fileName string) {
 		p.Legend.Add(fmt.Sprintf("tr-%2d [%03d-%03d]", i, tj.start, tj.end), ploti)
 	}
 	pwidth := 6 * vg.Inch
-	pheight, _ := vg.ParseLength(fmt.Sprintf("%.2fin", Height/Width*6))
+	pheight, _ := vg.ParseLength(fmt.Sprintf("%.2fin", 6/AspectRatio))
 
 	if err := p.Save(pwidth, pheight, fmt.Sprintf("%s.png", fileName)); err != nil {
 		panic(err)
