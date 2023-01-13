@@ -23,10 +23,8 @@ type Config struct {
 }
 
 type Model struct {
-	nparams int
-	params  *mat.VecDense
-	config  Config
-	Data    SyncedPlots
+	params *mat.VecDense
+	config Config
 }
 
 type Trajectory struct {

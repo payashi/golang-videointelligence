@@ -13,7 +13,13 @@ import (
 	"gonum.org/v1/plot/vg/draw"
 )
 
-func NewModel(tj1, tj2 Trajectory, params *mat.VecDense, config Config) *Model {
+func NewModel(config Config) *Model {
+	m := new(Model)
+	m.config = config
+	return m
+}
+
+func NewSyncedPlots(tj1, tj2 Trajectory) *SyncedPlots {
 	start := maxInt(tj1.start, tj2.start)
 	end := minInt(tj1.end, tj2.end)
 	if start > end {
@@ -21,37 +27,38 @@ func NewModel(tj1, tj2 Trajectory, params *mat.VecDense, config Config) *Model {
 	}
 	pl1 := tj1.plots[start : end+1]
 	pl2 := tj2.plots[start : end+1]
-	m := new(Model)
-	m.Data = SyncedPlots{
+	return &SyncedPlots{
 		size: len(pl1),
 		pl1:  pl1,
 		pl2:  pl2,
 	}
-	m.params = params
-	m.nparams = params.Len()
-	m.config = config
-	return m
 }
 
-func (m *Model) BatchGradientDecent(dp, mu float64, ntrials int) {
+func (m *Model) Tune(
+	plots *SyncedPlots,
+	params *mat.VecDense,
+	dp, mu float64,
+	ntrials int,
+) {
+	m.params = params
+
 	for i := 0; i < ntrials; i++ {
 		// Update phi
-		phi1, phi2 := m.getPhis()
+		phi1, phi2 := m.getPhis(plots)
 		m.config.Phi1 += phi1
 		m.config.Phi2 += phi2
 
-		inc := mat.NewVecDense(m.nparams, nil)
+		inc := mat.NewVecDense(m.params.Len(), nil)
 		// Update theta, z
 		for j := 0; j < m.params.Len()-2; j++ {
-			inc.SetVec(j, -m.getDiff(j, dp))
+			inc.SetVec(j, -m.getDiff(j, dp, plots))
 		}
 		inc.ScaleVec(1/inc.Norm(2), inc)
 		m.params.AddScaledVec(m.params, mu*math.Exp(-4*float64(i)/float64(ntrials)), inc)
 	}
 }
 
-func (m Model) Plot(outDir, fileName string) {
-	data := m.project(m.params, m.Data)
+func (m Model) Plot(outDir, fileName string, plots *SyncedPlots) {
 	p := plot.New()
 
 	corners := []ScreenPlot{
@@ -61,24 +68,23 @@ func (m Model) Plot(outDir, fileName string) {
 		{-0.5, 0.},                 // mid left
 	}
 
-	frame := m.project(m.params, SyncedPlots{
+	fm1, fm2 := m.project(m.params, &SyncedPlots{
 		size: len(corners),
 		pl1:  corners,
 		pl2:  corners,
 	})
-	for i := 0; i < len(frame); i++ {
-		f1 := frame[i]
-		f2 := frame[(i+1)%len(frame)]
+	for i := 0; i < 4; i++ {
+		ni := (i + 1) % 4
 		ploti1, err := plotter.NewLine(plotter.XYs{
-			{X: f1[0], Y: f1[1]},
-			{X: f2[0], Y: f2[1]},
+			{X: fm1.At(i, 0), Y: fm1.At(i, 1)},
+			{X: fm1.At(ni, 0), Y: fm1.At(ni, 1)},
 		})
 		if err != nil {
 			panic(err)
 		}
 		ploti2, err := plotter.NewLine(plotter.XYs{
-			{X: f1[2], Y: f1[3]},
-			{X: f2[2], Y: f2[3]},
+			{X: fm2.At(i, 0), Y: fm2.At(i, 1)},
+			{X: fm2.At(ni, 0), Y: fm2.At(ni, 1)},
 		})
 		if err != nil {
 			panic(err)
@@ -99,10 +105,12 @@ func (m Model) Plot(outDir, fileName string) {
 		p.Add(ploti1)
 		p.Add(ploti2)
 	}
-	for _, v := range data {
+
+	m1, m2 := m.project(m.params, plots)
+	for i := 0; i < plots.size; i++ {
 		ploti1, err := plotter.NewLine(plotter.XYs{
 			{X: 0, Y: 0},
-			{X: v[0], Y: v[1]},
+			{X: m1.At(i, 0), Y: m1.At(i, 1)},
 		})
 		if err != nil {
 			panic(err)
@@ -112,7 +120,7 @@ func (m Model) Plot(outDir, fileName string) {
 
 		ploti2, err := plotter.NewLine(plotter.XYs{
 			{X: 0, Y: -m.config.L},
-			{X: v[2], Y: v[3]},
+			{X: m2.At(i, 0), Y: m2.At(i, 1)},
 		})
 		if err != nil {
 			panic(err)
@@ -121,8 +129,8 @@ func (m Model) Plot(outDir, fileName string) {
 		p.Add(ploti2)
 
 		ploti3, err := plotter.NewLine(plotter.XYs{
-			{X: v[0], Y: v[1]},
-			{X: v[2], Y: v[3]},
+			{X: m1.At(i, 0), Y: m1.At(i, 1)},
+			{X: m2.At(i, 0), Y: m2.At(i, 1)},
 		})
 		if err != nil {
 			panic(err)
@@ -138,7 +146,7 @@ func (m Model) Plot(outDir, fileName string) {
 	}
 }
 
-func (m Model) Convert(plots SyncedPlots) []*mat.VecDense {
+func (m Model) Convert(plots *SyncedPlots) []*mat.VecDense {
 	theta1, theta2 := m.params.At(0, 0), m.params.At(1, 0)
 	z1, z2 := m.params.At(2, 0), m.params.At(3, 0)
 
@@ -244,19 +252,20 @@ func (m Model) PrintParams(blender bool) {
 		m.params.At(2, 0),
 		m.params.At(3, 0),
 	)
-	fmt.Printf("loss: %.5f\n",
-		m.getPointsDistance(m.params),
-	)
 }
 
-func (m Model) getPhis() (float64, float64) { // phi1, phi2
-	data := m.project(m.params, SyncedPlots{
+func (m Model) getPhis(plots *SyncedPlots) (float64, float64) { // phi1, phi2
+	m1, m2 := m.project(m.params, &SyncedPlots{
 		size: 2,
-		pl1:  []ScreenPlot{m.Data.pl1[0], m.Data.pl1[m.Data.size-1]},
-		pl2:  []ScreenPlot{m.Data.pl2[0], m.Data.pl2[m.Data.size-1]},
+		pl1:  []ScreenPlot{plots.pl1[0], plots.pl1[plots.size-1]},
+		pl2:  []ScreenPlot{plots.pl2[0], plots.pl2[plots.size-1]},
 	})
-	l1 := []float64{data[1][0] - data[0][0], data[1][1] - data[0][1]}
-	l2 := []float64{data[1][2] - data[0][2], data[1][3] - data[0][3]}
+	d1 := mat.NewVecDense(3, nil)
+	d2 := mat.NewVecDense(3, nil)
+	d1.SubVec(m1.RowView(1), m1.RowView(0))
+	d2.SubVec(m2.RowView(1), m2.RowView(0))
+	l1 := d1.RawVector().Data
+	l2 := d2.RawVector().Data
 	var phi1, phi2 float64
 	if l1[0] > 0 {
 		phi1 = -0.5*math.Pi - math.Atan(l1[1]/l1[0])
@@ -283,16 +292,16 @@ func (m Model) getPhis() (float64, float64) { // phi1, phi2
 	return phi1, phi2
 }
 
-func (m *Model) getDiff(i int, dp float64) float64 {
-	cv := m.getPointsDistance(m.params)
-	nparams := mat.NewVecDense(m.nparams, nil)
+func (m *Model) getDiff(i int, dp float64, plots *SyncedPlots) float64 {
+	cv := m.getPointsDistance(m.params, plots)
+	nparams := mat.NewVecDense(m.params.Len(), nil)
 	nparams.SetVec(i, dp)
 	nparams.AddVec(m.params, nparams)
-	nv := m.getPointsDistance(nparams)
+	nv := m.getPointsDistance(nparams, plots)
 	return (nv - cv) / dp
 }
 
-func (m *Model) project(params *mat.VecDense, plots SyncedPlots) [][]float64 {
+func (m *Model) project(params *mat.VecDense, plots *SyncedPlots) (*mat.Dense, *mat.Dense) {
 	theta1, theta2 := params.At(0, 0), params.At(1, 0)
 	z1, z2 := params.At(2, 0), params.At(3, 0)
 
@@ -327,7 +336,8 @@ func (m *Model) project(params *mat.VecDense, plots SyncedPlots) [][]float64 {
 		math.Cos(theta2),
 	})
 
-	ret := make([][]float64, plots.size)
+	ret1 := mat.NewDense(plots.size, 3, nil)
+	ret2 := mat.NewDense(plots.size, 3, nil)
 
 	for i := 0; i < plots.size; i++ {
 		pl1 := plots.pl1[i]
@@ -352,21 +362,20 @@ func (m *Model) project(params *mat.VecDense, plots SyncedPlots) [][]float64 {
 			0, -m.config.L, z2,
 		}), t2, d2)
 
-		// x1, y1, x2, y2
-		ret[i] = []float64{
-			d1.At(0, 0), d1.At(1, 0),
-			d2.At(0, 0), d2.At(1, 0),
-		}
+		ret1.SetRow(i, d1.RawVector().Data)
+		ret2.SetRow(i, d2.RawVector().Data)
 	}
-	return ret
+	return ret1, ret2
 }
 
-func (m Model) getPointsDistance(params *mat.VecDense) float64 {
-	points := m.project(params, m.Data)
+func (m Model) getPointsDistance(params *mat.VecDense, plots *SyncedPlots) float64 {
+	m1, m2 := m.project(params, plots)
+
 	sum := .0
-	for _, p := range points {
-		x1, y1, x2, y2 := p[0], p[1], p[2], p[3]
-		sum += (x1-x2)*(x1-x2) + (y1-y2)*(y1-y2)
+	for i := 0; i < plots.size; i++ {
+		d := mat.NewVecDense(3, nil)
+		d.SubVec(m1.RowView(i), m2.RowView(i))
+		sum += d.Norm(2)
 	}
 	return sum
 }

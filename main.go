@@ -22,19 +22,25 @@ func main() {
 	ar1.Plot(outDir, objName1)
 	ar2.Plot(outDir, objName2)
 
-	model := vtrack.NewModel(ar1.At(0), ar2.At(10),
+	plots := vtrack.NewSyncedPlots(ar1.At(0), ar2.At(10))
+
+	model := vtrack.NewModel(
+		vtrack.Config{Phi1: 0., Phi2: 0., K1: 1.28, K2: 0.512, L: 18.97},
+	)
+
+	model.Tune(
+		plots,
 		mat.NewVecDense(4, []float64{ // params
 			-0.01 * math.Pi, -0.01 * math.Pi, // theta1, theta2
 			2.3, 2.2, // z1, z2
 		}),
-		vtrack.Config{Phi1: 0., Phi2: 0., K1: 1.28, K2: 0.512, L: 18.97},
+		1e-2, 1e-2, 100000,
 	)
-	model.Plot(outDir, "before")
-	model.BatchGradientDecent(1e-2, 1e-2, 100000)
-	model.Plot(outDir, "after")
+	model.Plot(outDir, "before", plots)
+	model.Plot(outDir, "after", plots)
 	model.PrintParams(true)
 	model.PrintParams(false)
-	points := model.Convert(model.Data)
+	points := model.Convert(plots)
 	for _, p := range points {
 		fmt.Printf("%v\n", p)
 	}
