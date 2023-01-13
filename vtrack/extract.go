@@ -18,8 +18,8 @@ import (
 	"gonum.org/v1/plot/vg"
 )
 
-const width float64 = 1280
-const height float64 = 720
+const Width float64 = 1280
+const Height float64 = 720
 const MaxDur int = 601
 
 func Extract(bucketName string, objName string, plot bool) AnnotationResults {
@@ -69,13 +69,13 @@ func Extract(bucketName string, objName string, plot bool) AnnotationResults {
 			box := tsobj.NormalizedBoundingBox
 			tidx := tsobj.TimeOffset.AsDuration().Milliseconds() / 100
 			tj.plots[tidx] = []float64{
-				float64((box.Left+box.Right)/2) * width,
-				(1 - float64(box.Top)) * height,
+				float64((box.Left+box.Right)/2) * Width,
+				(1 - float64(box.Top)) * Height,
 			}
 		}
 		tj.length = tj.calcLength()
-		tj.width = width
-		tj.height = height
+		tj.width = Width
+		tj.height = Height
 	}
 	sort.Slice(ret.trajectories, func(i, j int) bool {
 		return ret.trajectories[i].length > ret.trajectories[j].length
@@ -123,8 +123,8 @@ func (ar AnnotationResults) Plot(fileName string) {
 
 	p.X.Min = 0
 	p.Y.Min = 0
-	p.X.Max = width
-	p.Y.Max = height
+	p.X.Max = Width
+	p.Y.Max = Height
 
 	p.Add(plotter.NewGrid())
 
@@ -146,7 +146,7 @@ func (ar AnnotationResults) Plot(fileName string) {
 		p.Legend.Add(fmt.Sprintf("tr-%2d [%03d-%03d]", i, tj.start, tj.end), ploti)
 	}
 	pwidth := 6 * vg.Inch
-	pheight, _ := vg.ParseLength(fmt.Sprintf("%.2fin", height/width*6))
+	pheight, _ := vg.ParseLength(fmt.Sprintf("%.2fin", Height/Width*6))
 
 	if err := p.Save(pwidth, pheight, fmt.Sprintf("%s.png", fileName)); err != nil {
 		panic(err)

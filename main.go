@@ -19,19 +19,22 @@ var objName2 = "2022-12-07-0300-2t"
 func main() {
 	ar1 := getAnnotationResults(objName1)
 	ar2 := getAnnotationResults(objName2)
-	// for _, z0 := range LinSpace(-0.2, -1.2, 21) {
 	model := vtrack.NewModel(ar1.At(0), ar2.At(10),
 		mat.NewVecDense(4, []float64{ // params
 			-0.01 * math.Pi, -0.01 * math.Pi, // theta1, theta2
-			0.5, 0.5, // z1, z2
+			2.3, 2.2, // z1, z2
 		}),
-		vtrack.Config{Phi1: 0., Phi2: 0., K: 1}, // Phi1, Phi2, K
+		vtrack.Config{Phi1: 0., Phi2: 0., K1: 1.28, K2: 0.512, L: 18.97},
 	)
-	model.Plot2D(outDir, "before")
-	model.BatchGradientDecent(1e-2, 1e-1, 200000)
-	model.Plot2D(outDir, "after")
+	model.Plot(outDir, "before")
+	model.BatchGradientDecent(1e-2, 1e-2, 100000)
+	model.Plot(outDir, "after")
 	model.PrintParams(true)
 	model.PrintParams(false)
+	points := model.Convert(model.Data)
+	for _, p := range points {
+		fmt.Printf("%v\n", p)
+	}
 }
 
 func LinSpace(start, end float64, num int) []float64 {
