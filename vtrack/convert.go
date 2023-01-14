@@ -2,8 +2,6 @@ package vtrack
 
 import (
 	"fmt"
-	"log"
-	"math"
 	"sort"
 
 	"gonum.org/v1/gonum/mat"
@@ -37,16 +35,13 @@ func Plot(outDir, fileName string, tdps []ThreeDimensionalPlots) {
 }
 
 func (m Model) Idenitfy(ar1, ar2 AnnotationResults) []ThreeDimensionalPlots {
-	const MinSize int = 20
-	const MaxLoss float64 = 0.1
-	const MinConf float32 = 0.4
+	const MinSize int = 40
+	const MaxLoss float64 = 50
+	const MinConf float32 = 0.2
 	ret := make([]ThreeDimensionalPlots, 0)
 	for i, tj1 := range ar1.Trajectories {
-		if tj1.conf < MinConf {
-			continue
-		}
 		for j, tj2 := range ar2.Trajectories {
-			if tj2.conf < MinConf {
+			if tj1.conf*tj2.conf < MinConf {
 				continue
 			}
 			pl, err := NewSyncedPlots(tj1, tj2)
@@ -73,91 +68,18 @@ func (m Model) Idenitfy(ar1, ar2 AnnotationResults) []ThreeDimensionalPlots {
 }
 
 func (m Model) Convert(plots *SyncedPlots) (*mat.Dense, float64) {
-	theta1, theta2 := m.params.At(0, 0), m.params.At(1, 0)
-
-	n1 := mat.NewVecDense(3, []float64{
-		math.Cos(m.config.Phi1) * math.Cos(theta1),
-		math.Sin(m.config.Phi1) * math.Cos(theta1),
-		math.Sin(theta1),
-	})
-	n2 := mat.NewVecDense(3, []float64{
-		math.Cos(m.config.Phi2) * math.Cos(theta2),
-		math.Sin(m.config.Phi2) * math.Cos(theta2),
-		math.Sin(theta2),
-	})
-	a1 := mat.NewVecDense(3, []float64{
-		math.Sin(m.config.Phi1),
-		-math.Cos(m.config.Phi1),
-		0,
-	})
-	a2 := mat.NewVecDense(3, []float64{
-		math.Sin(m.config.Phi2),
-		-math.Cos(m.config.Phi2),
-		0,
-	})
-	b1 := mat.NewVecDense(3, []float64{
-		-math.Cos(m.config.Phi1) * math.Sin(theta1),
-		-math.Sin(m.config.Phi1) * math.Sin(theta1),
-		math.Cos(theta1),
-	})
-	b2 := mat.NewVecDense(3, []float64{
-		-math.Cos(m.config.Phi2) * math.Sin(theta2),
-		-math.Sin(m.config.Phi2) * math.Sin(theta2),
-		math.Cos(theta2),
-	})
-
-	c21 := mat.NewVecDense(3, nil)
-	c21.SubVec(&m.config.C2, &m.config.C1)
-
-	avgz := .0
-	loss := .0
-	for i := 0; i < plots.size; i++ {
-		pl1 := plots.pl1[i]
-		pl2 := plots.pl2[i]
-
-		d1 := mat.NewVecDense(3, nil)
-		d1.AddScaledVec(d1, pl1.p, a1)
-		d1.AddScaledVec(d1, pl1.q, b1)
-		d1.AddScaledVec(n1, m.config.K1, d1)
-
-		d2 := mat.NewVecDense(3, nil)
-		d2.AddScaledVec(d2, pl2.p, a2)
-		d2.AddScaledVec(d2, pl2.q, b2)
-		d2.AddScaledVec(n2, m.config.K2, d2)
-
-		mata := mat.NewDense(2, 2, []float64{
-			mat.Dot(d1, d1), -mat.Dot(d1, d2),
-			mat.Dot(d1, d2), -mat.Dot(d2, d2),
-		})
-		matb := mat.NewVecDense(2, []float64{
-			mat.Dot(c21, d1),
-			mat.Dot(c21, d2),
-		})
-		t := mat.NewVecDense(2, nil)
-		matainv := mat.NewDense(2, 2, nil)
-		error := matainv.Inverse(mata)
-		if error != nil {
-			log.Fatal("Inversed matrix does not exist")
-		}
-		t.MulVec(matainv, matb)
-		l1 := mat.NewVecDense(3, nil)
-		l1.AddScaledVec(&m.config.C1, t.At(0, 0), d1)
-		l2 := mat.NewVecDense(3, nil)
-		l2.AddScaledVec(&m.config.C2, t.At(1, 0), d2)
-		// Mid z
-		avgz += (l1.At(2, 0) + l2.At(2, 0)) * 0.5
-
-		// Diff Vector
-		ld := mat.NewVecDense(3, nil)
-		ld.SubVec(l1, l2)
-		loss += ld.Norm(2)
-	}
-	avgz /= float64(plots.size)
-	loss /= float64(plots.size)
-
-	m1, m2 := m.project(m.params, avgz, plots)
+	m1, m2 := m.project(m.params, plots)
 	ret := mat.NewDense(plots.size, 3, nil)
 	ret.Add(m1, m2)
 	ret.Scale(0.5, ret)
+
+	diff := mat.NewDense(plots.size, 3, nil)
+	diff.Sub(m1, m2)
+	loss := .0
+	for i := 0; i < diff.RawMatrix().Rows; i++ {
+		loss += mat.NewVecDense(3, diff.RawRowView(i)).Norm(2)
+	}
+	loss /= float64(plots.size)
+
 	return ret, loss
 }
