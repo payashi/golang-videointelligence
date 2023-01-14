@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
-	"os"
 
+	"github.com/payashi/vannotate"
 	"github.com/payashi/vtrack"
 	"gonum.org/v1/gonum/mat"
 )
@@ -25,87 +25,33 @@ var config = vtrack.Config{
 	}),
 }
 
-func main() {
-	ar1 := getAnnotationResults(objName1)
-	ar2 := getAnnotationResults(objName2)
+var tconfig = vtrack.TuneConfig{
+	Ntrials: 100000,
+	Dp:      1e-2,
+	Mu:      1e-2,
+	Z0:      1.7,
+}
 
-	model := getModel("model", ar1, ar2)
-	model.PrintUnityParams()
-	tdplots := model.Idenitfy(ar1, ar2)
-	vtrack.Plot(outDir, "tdplots", tdplots)
+func main() {
+	// vannotate.DetectPerson(bucketName, objName1)
+	srList1 := vannotate.GetSeries(outDir, bucketName, objName1)
+	srList2 := vannotate.GetSeries(outDir, bucketName, objName2)
+	sr1 := srList1[0]
+	sr2 := srList2[10]
+
+	cs := vtrack.GetCameraSystem(outDir, "camsys", sr1, sr2, config, tconfig)
+	cs.PrintUnityParams()
+	// vtrack.Plot(outDir, "tdplots", tdplots)
+	ipList := cs.Idenitfy(srList1, srList2)
+	// cs.Plot(outDir, "model", )
 
 	// Save on local
-	newFile, err := json.MarshalIndent(tdplots, "", "\t")
+	newFile, err := json.MarshalIndent(ipList, "", "\t")
 	if err != nil {
 		panic(err)
 	}
 	err = ioutil.WriteFile(fmt.Sprintf("%s/tdplots.json", outDir), newFile, 0644)
 	if err != nil {
 		panic(err)
-	}
-}
-
-func getModel(objName string, ar1, ar2 vtrack.AnnotationResults) *vtrack.Model {
-	filePath := fmt.Sprintf("%s/%s.json", outDir, objName)
-	if file, err := os.Open(filePath); err == nil {
-		defer file.Close()
-		b, err := ioutil.ReadAll(file)
-		if err != nil {
-			panic(err)
-		}
-		var ret vtrack.Model
-		if err := json.Unmarshal(b, &ret); err != nil {
-			panic(err)
-		}
-		return &ret
-	} else {
-		fmt.Printf("Fetching %s...\n", objName)
-		plots, _ := vtrack.NewSyncedPlots(ar1.At(0), ar2.At(10))
-
-		ret := vtrack.NewModel(config)
-		ret.Tune(vtrack.TuneConfig{
-			Ntrials: 100000,
-			Dp:      1e-2,
-			Mu:      1e-2,
-			Z0:      1.7,
-			Plots:   plots,
-		})
-		ret.Plot(outDir, "after")
-
-		// Save on local
-		newFile, err := json.MarshalIndent(ret, "", "\t")
-		if err != nil {
-			panic(err)
-		}
-		_ = ioutil.WriteFile(filePath, newFile, 0644)
-		return ret
-	}
-}
-
-func getAnnotationResults(objName string) vtrack.AnnotationResults {
-	filePath := fmt.Sprintf("%s/%s.json", outDir, objName)
-	if file, err := os.Open(filePath); err == nil {
-		defer file.Close()
-		b, err := ioutil.ReadAll(file)
-		if err != nil {
-			panic(err)
-		}
-		var ret vtrack.AnnotationResults
-		if err := json.Unmarshal(b, &ret); err != nil {
-			panic(err)
-		}
-		return ret
-	} else {
-		fmt.Printf("Fetching %s...\n", objName)
-		ar := vtrack.Extract(bucketName, objName)
-		ar.Plot(outDir, objName)
-
-		// Save on local
-		newFile, err := json.MarshalIndent(ar, "", "\t")
-		if err != nil {
-			panic(err)
-		}
-		_ = ioutil.WriteFile(filePath, newFile, 0644)
-		return ar
 	}
 }

@@ -1,89 +1,52 @@
 package vtrack
 
 import (
-	"fmt"
 	"math"
 	"sort"
 
+	"github.com/payashi/vannotate"
 	"gonum.org/v1/gonum/mat"
-	"gonum.org/v1/plot"
-	"gonum.org/v1/plot/plotter"
-	"gonum.org/v1/plot/plotutil"
-	"gonum.org/v1/plot/vg"
 )
 
-func Plot(outDir, fileName string, tdps []ThreeDimensionalPlots) {
-	p := plot.New()
-	for i, tdp := range tdps {
-		pts := make(plotter.XYs, tdp.size)
-		for i := 0; i < tdp.size; i++ {
-			pts[i] = plotter.XY{X: tdp.plots.At(i, 0), Y: tdp.plots.At(i, 1)}
-		}
-		line, _, err := plotter.NewLinePoints(pts)
-		if err != nil {
-			panic(err)
-		}
-		line.Color = plotutil.Color(i)
-		p.Add(line)
-	}
-	p.X.Max = 10
-	p.X.Min = 0
-	p.Y.Max = 0
-	p.Y.Min = -20
-	p.Add(plotter.NewGrid())
-
-	if err := p.Save(vg.Inch*30, vg.Inch*30, fmt.Sprintf("%s/%s.png", outDir, fileName)); err != nil {
-		panic(err)
-	}
-}
-
-func (m Model) Idenitfy(ar1, ar2 AnnotationResults) []ThreeDimensionalPlots {
-	n1, n2 := len(ar1.Trajectories), len(ar2.Trajectories)
-	const MinSize int = 40
+func (cs CameraSystem) Idenitfy(srList1, srList2 []vannotate.Series) []IPlots {
+	n1, n2 := len(srList1), len(srList2)
 	const MaxLoss float64 = 30
 	const MinDist float64 = 10.
-	tdps := make([][]ThreeDimensionalPlots, n1)
+	tdps := make([][]IPlots, n1)
 	for i := 0; i < n1; i++ {
-		tdps[i] = make([]ThreeDimensionalPlots, n2)
+		tdps[i] = make([]IPlots, n2)
 		for j := 0; j < n2; j++ {
-			tdps[i][j] = ThreeDimensionalPlots{
+			tdps[i][j] = IPlots{
 				i: -1, j: -1,
-				loss:  math.Inf(1),
-				size:  0,
-				plots: &mat.Dense{},
-				start: 0,
-				end:   0,
+				Loss:  math.Inf(1),
+				Size:  0,
+				Plots: &mat.Dense{},
+				Start: 0,
+				End:   0,
 			}
 
 		}
 	}
-	for i, tj1 := range ar1.Trajectories {
-		for j, tj2 := range ar2.Trajectories {
-			pl, err := NewSyncedPlots(tj1, tj2)
+	for i, sr1 := range srList1 {
+		for j, sr2 := range srList2 {
+			ip, err := cs.join(sr1, sr2)
+			ip.i = i
+			ip.j = j
 			if err != nil {
 				continue
 			}
-			ps, loss := m.Convert(pl)
-			size := ps.RawMatrix().Rows
-			if size < MinSize || loss > MaxLoss {
+			if ip.Loss > MaxLoss {
 				continue
 			}
 			path := mat.NewVecDense(3, nil)
-			path.SubVec(ps.RowView(size-1), ps.RowView(0))
+			path.SubVec(ip.Plots.RowView(ip.Size-1), ip.Plots.RowView(0))
 			if path.Norm(2) < MinDist {
 				continue
 			}
-			tdps[i][j] = ThreeDimensionalPlots{
-				i: i, j: j,
-				loss:  loss,
-				size:  size,
-				plots: ps,
-				start: pl.start,
-				end:   pl.end,
-			}
+			tdps[i][j] = ip
 		}
 	}
-	ret := make([]ThreeDimensionalPlots, 0)
+	ret := make([]IPlots, 0)
 	usedis := make([]int, 0)
 	usedjs := make([]int, 0)
 	for {
@@ -98,8 +61,8 @@ func (m Model) Idenitfy(ar1, ar2 AnnotationResults) []ThreeDimensionalPlots {
 					continue
 				}
 				tdp := &tdps[i][j]
-				if best > tdp.loss {
-					best = tdp.loss
+				if best > tdp.Loss {
+					best = tdp.Loss
 					argmini, argminj = tdp.i, tdp.j
 				}
 			}
@@ -111,12 +74,17 @@ func (m Model) Idenitfy(ar1, ar2 AnnotationResults) []ThreeDimensionalPlots {
 		usedjs = append(usedjs, argminj)
 		ret = append(ret, tdps[argmini][argminj])
 	}
-	sort.Slice(ret, func(i, j int) bool { return ret[i].loss < ret[j].loss })
+	sort.Slice(ret, func(i, j int) bool { return ret[i].Loss < ret[j].Loss })
 	return ret
 }
 
-func (m Model) Convert(plots *SyncedPlots) (*mat.Dense, float64) {
-	m1, m2 := m.project(m.params, plots)
+func (cs CameraSystem) join(sr1, sr2 vannotate.Series) (IPlots, error) {
+	plots, err := NewSyncedPlots(sr1, sr2)
+	if err != nil {
+		return &mat.Dense{}, .0, err
+	}
+
+	m1, m2 := cs.project(cs.params, plots)
 	ret := mat.NewDense(plots.size, 3, nil)
 	ret.Add(m1, m2)
 	ret.Scale(0.5, ret)
@@ -129,7 +97,7 @@ func (m Model) Convert(plots *SyncedPlots) (*mat.Dense, float64) {
 	}
 	loss /= float64(plots.size)
 
-	return ret, loss
+	return ret, loss, nil
 }
 
 func contains(s []int, t int) bool {
