@@ -149,29 +149,45 @@ func (m Model) Plot(outDir, fileName string) {
 	}
 }
 
-func (m Model) PrintParams(blender bool) {
+func (m Model) PrintUnityParams() {
 	theta1, theta2 := m.params.At(0, 0), m.params.At(1, 0)
 	phi1, phi2 := m.params.At(3, 0), m.params.At(4, 0)
-	if !blender {
-		// by radian
-		fmt.Printf("theta1: %.2f pi, theta2: %.2f pi, ",
-			theta1/math.Pi,
-			theta2/math.Pi,
-		)
-		fmt.Printf("phi1: %.2f pi, phi2: %.2f pi\n",
-			phi1/math.Pi,
-			phi2/math.Pi,
-		)
-	} else {
-		fmt.Printf("(%.2f deg, 0.00 deg, %.2f deg), ",
-			theta1/math.Pi*180+90,
-			phi1/math.Pi*180-90,
-		)
-		fmt.Printf("(%.2f deg, 0.00 deg, %.2f deg)\n",
-			theta2/math.Pi*180+90,
-			phi2/math.Pi*180-90,
-		)
-	}
+	toDegree := 180 / math.Pi
+	theta1 *= toDegree
+	theta2 *= toDegree
+	phi1 *= toDegree
+	phi2 *= toDegree
+
+	// Camera1
+	fmt.Println("Camera1:")
+	fmt.Printf("\tPosition: [%0.4f, %0.4f, %0.4f]\n",
+		m.config.C1.At(0, 0),
+		m.config.C1.At(2, 0),
+		m.config.C1.At(1, 0),
+	)
+	fmt.Printf("\tRotation: [%0.4f°, %0.4f°, %0.4f°]\n",
+		-theta1,
+		90-phi1,
+		0.,
+	)
+	fmt.Printf("\tVertical FOV: %0.4f°\n",
+		math.Atan(m.config.K1/2/AspectRatio)*2*toDegree,
+	)
+	// Camera2
+	fmt.Println("Camera2:")
+	fmt.Printf("\tPosition: [%0.4f, %0.4f, %0.4f]\n",
+		m.config.C2.At(0, 0),
+		m.config.C2.At(2, 0),
+		m.config.C2.At(1, 0),
+	)
+	fmt.Printf("\tRotation: [%0.4f°, %0.4f°, %0.4f°]\n",
+		-theta2,
+		90-phi2,
+		0.,
+	)
+	fmt.Printf("\tVertical FOV: %0.4f°\n",
+		math.Atan(m.config.K2/2/AspectRatio)*2*toDegree,
+	)
 }
 
 func (m *Model) getDiff(i int) float64 {

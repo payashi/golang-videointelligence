@@ -30,7 +30,7 @@ func main() {
 	ar2 := getAnnotationResults(objName2)
 
 	model := getModel("model", ar1, ar2)
-	model.PrintParams(false)
+	model.PrintUnityParams()
 	tdplots := model.Idenitfy(ar1, ar2)
 	vtrack.Plot(outDir, "tdplots", tdplots)
 

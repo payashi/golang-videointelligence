@@ -168,27 +168,23 @@ func (m *Model) UnmarshalJSON(b []byte) error {
 	return err
 }
 
-type xyz struct {
-	X, Y, Z float64
-}
-
 func (tdp ThreeDimensionalPlots) MarshalJSON() ([]byte, error) {
-	plots := make([]xyz, tdp.size)
+	plots := make([][]float64, tdp.size)
 	for i := 0; i < tdp.size; i++ {
-		plots[i] = xyz{
-			X: tdp.plots.At(i, 0),
-			Y: tdp.plots.At(i, 1),
-			Z: tdp.plots.At(i, 2),
+		plots[i] = []float64{
+			tdp.plots.At(i, 0),
+			tdp.plots.At(i, 1),
+			tdp.plots.At(i, 2),
 		}
 	}
 	v := struct {
-		Loss  float64 `json:"loss"`
-		Size  int     `json:"size"`
-		I     int     `json:"i"`
-		J     int     `json:"j"`
-		Start int     `json:"start"`
-		End   int     `json:"end"`
-		Plots []xyz   `json:"plots"`
+		Loss  float64     `json:"loss"`
+		Size  int         `json:"size"`
+		I     int         `json:"i"`
+		J     int         `json:"j"`
+		Start int         `json:"start"`
+		End   int         `json:"end"`
+		Plots [][]float64 `json:"plots"`
 	}{
 		Loss:  tdp.loss,
 		Size:  tdp.size,
@@ -204,13 +200,13 @@ func (tdp ThreeDimensionalPlots) MarshalJSON() ([]byte, error) {
 
 func (tdp *ThreeDimensionalPlots) UnmarshalJSON(b []byte) error {
 	tdp2 := &struct {
-		Loss  float64 `json:"loss"`
-		Size  int     `json:"size"`
-		I     int     `json:"i"`
-		J     int     `json:"j"`
-		Start int     `json:"start"`
-		End   int     `json:"end"`
-		Plots []xyz   `json:"plots"`
+		Loss  float64     `json:"loss"`
+		Size  int         `json:"size"`
+		I     int         `json:"i"`
+		J     int         `json:"j"`
+		Start int         `json:"start"`
+		End   int         `json:"end"`
+		Plots [][]float64 `json:"plots"`
 	}{}
 	err := json.Unmarshal(b, tdp2)
 	tdp.loss = tdp2.Loss
@@ -221,7 +217,7 @@ func (tdp *ThreeDimensionalPlots) UnmarshalJSON(b []byte) error {
 	tdp.end = tdp2.End
 	plots := mat.NewDense(len(tdp2.Plots), 3, nil)
 	for i, v := range tdp2.Plots {
-		plots.SetRow(i, []float64{v.X, v.Y, v.Z})
+		plots.SetRow(i, v)
 	}
 	tdp.plots = plots
 	return err

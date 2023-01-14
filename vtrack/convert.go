@@ -13,15 +13,17 @@ import (
 
 func Plot(outDir, fileName string, tdps []ThreeDimensionalPlots) {
 	p := plot.New()
-	for _, tdp := range tdps {
+	for i, tdp := range tdps {
 		pts := make(plotter.XYs, tdp.size)
 		for i := 0; i < tdp.size; i++ {
 			pts[i] = plotter.XY{X: tdp.plots.At(i, 0), Y: tdp.plots.At(i, 1)}
 		}
-		err := plotutil.AddLinePoints(p, pts)
+		line, _, err := plotter.NewLinePoints(pts)
 		if err != nil {
 			panic(err)
 		}
+		line.Color = plotutil.Color(i)
+		p.Add(line)
 	}
 	p.X.Max = 10
 	p.X.Min = 0
@@ -36,8 +38,8 @@ func Plot(outDir, fileName string, tdps []ThreeDimensionalPlots) {
 
 func (m Model) Idenitfy(ar1, ar2 AnnotationResults) []ThreeDimensionalPlots {
 	const MinSize int = 40
-	const MaxLoss float64 = 50
-	const MinConf float32 = 0.2
+	const MaxLoss float64 = 30
+	const MinConf float32 = 0.3
 	ret := make([]ThreeDimensionalPlots, 0)
 	for i, tj1 := range ar1.Trajectories {
 		for j, tj2 := range ar2.Trajectories {
