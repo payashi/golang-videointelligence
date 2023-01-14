@@ -2,6 +2,7 @@ package vtrack
 
 import (
 	"fmt"
+	"math"
 	"sort"
 
 	"gonum.org/v1/gonum/mat"
@@ -37,15 +38,27 @@ func Plot(outDir, fileName string, tdps []ThreeDimensionalPlots) {
 }
 
 func (m Model) Idenitfy(ar1, ar2 AnnotationResults) []ThreeDimensionalPlots {
+	n1, n2 := len(ar1.Trajectories), len(ar2.Trajectories)
 	const MinSize int = 40
 	const MaxLoss float64 = 30
-	const MinConf float32 = 0.3
-	ret := make([]ThreeDimensionalPlots, 0)
+	const MinDist float64 = 10.
+	tdps := make([][]ThreeDimensionalPlots, n1)
+	for i := 0; i < n1; i++ {
+		tdps[i] = make([]ThreeDimensionalPlots, n2)
+		for j := 0; j < n2; j++ {
+			tdps[i][j] = ThreeDimensionalPlots{
+				i: -1, j: -1,
+				loss:  math.Inf(1),
+				size:  0,
+				plots: &mat.Dense{},
+				start: 0,
+				end:   0,
+			}
+
+		}
+	}
 	for i, tj1 := range ar1.Trajectories {
 		for j, tj2 := range ar2.Trajectories {
-			if tj1.conf*tj2.conf < MinConf {
-				continue
-			}
 			pl, err := NewSyncedPlots(tj1, tj2)
 			if err != nil {
 				continue
@@ -55,15 +68,48 @@ func (m Model) Idenitfy(ar1, ar2 AnnotationResults) []ThreeDimensionalPlots {
 			if size < MinSize || loss > MaxLoss {
 				continue
 			}
-			ret = append(ret, ThreeDimensionalPlots{
+			path := mat.NewVecDense(3, nil)
+			path.SubVec(ps.RowView(size-1), ps.RowView(0))
+			if path.Norm(2) < MinDist {
+				continue
+			}
+			tdps[i][j] = ThreeDimensionalPlots{
 				i: i, j: j,
 				loss:  loss,
 				size:  size,
 				plots: ps,
 				start: pl.start,
 				end:   pl.end,
-			})
+			}
 		}
+	}
+	ret := make([]ThreeDimensionalPlots, 0)
+	usedis := make([]int, 0)
+	usedjs := make([]int, 0)
+	for {
+		argmini, argminj := -1, -1
+		for i := 0; i < n1; i++ {
+			if contains(usedis, i) {
+				continue
+			}
+			best := math.Inf(1)
+			for j := 0; j < n2; j++ {
+				if contains(usedjs, j) {
+					continue
+				}
+				tdp := &tdps[i][j]
+				if best > tdp.loss {
+					best = tdp.loss
+					argmini, argminj = tdp.i, tdp.j
+				}
+			}
+		}
+		if argmini == -1 {
+			break
+		}
+		usedis = append(usedis, argmini)
+		usedjs = append(usedjs, argminj)
+		ret = append(ret, tdps[argmini][argminj])
 	}
 	sort.Slice(ret, func(i, j int) bool { return ret[i].loss < ret[j].loss })
 	return ret
@@ -78,10 +124,19 @@ func (m Model) Convert(plots *SyncedPlots) (*mat.Dense, float64) {
 	diff := mat.NewDense(plots.size, 3, nil)
 	diff.Sub(m1, m2)
 	loss := .0
-	for i := 0; i < diff.RawMatrix().Rows; i++ {
+	for i := 0; i < plots.size; i++ {
 		loss += mat.NewVecDense(3, diff.RawRowView(i)).Norm(2)
 	}
 	loss /= float64(plots.size)
 
 	return ret, loss
+}
+
+func contains(s []int, t int) bool {
+	for _, v := range s {
+		if v == t {
+			return true
+		}
+	}
+	return false
 }
