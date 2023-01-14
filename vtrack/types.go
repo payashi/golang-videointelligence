@@ -41,10 +41,11 @@ type AnnotationResults struct {
 }
 
 type ThreeDimensionalPlots struct {
-	loss  float64
-	size  int
-	plots *mat.Dense
-	i, j  int
+	loss       float64
+	size       int
+	plots      *mat.Dense
+	i, j       int
+	start, end int
 }
 
 func (sc ScreenPlot) MarshalJSON() ([]byte, error) {
@@ -118,12 +119,12 @@ func (m Model) MarshalJSON() ([]byte, error) {
 	}{
 		Theta1: m.params.At(0, 0),
 		Theta2: m.params.At(1, 0),
-		Phi1: m.config.Phi1,
-		Phi2: m.config.Phi2,
-		K1: m.config.K1,
-		K2: m.config.K2,
-		C1: m.config.C1.RawVector().Data,
-		C2: m.config.C2.RawVector().Data,
+		Phi1:   m.config.Phi1,
+		Phi2:   m.config.Phi2,
+		K1:     m.config.K1,
+		K2:     m.config.K2,
+		C1:     m.config.C1.RawVector().Data,
+		C2:     m.config.C2.RawVector().Data,
 	}
 	s, err := json.Marshal(v)
 	return s, err
@@ -145,10 +146,74 @@ func (m *Model) UnmarshalJSON(b []byte) error {
 	m.config = Config{
 		Phi1: m2.Phi1,
 		Phi2: m2.Phi2,
-		K1: m2.K1,
-		K2: m2.K2,
-		C1: *mat.NewVecDense(3, m2.C1),
-		C2: *mat.NewVecDense(3, m2.C2),
+		K1:   m2.K1,
+		K2:   m2.K2,
+		C1:   *mat.NewVecDense(3, m2.C1),
+		C2:   *mat.NewVecDense(3, m2.C2),
 	}
 	return err
 }
+
+type xyz struct {
+	X, Y, Z float64
+}
+
+func (tdp ThreeDimensionalPlots) MarshalJSON() ([]byte, error) {
+	plots := make([]xyz, tdp.size)
+	for i := 0; i < tdp.size; i++ {
+		plots[i] = xyz{
+			X: tdp.plots.At(i, 0),
+			Y: tdp.plots.At(i, 1),
+			Z: tdp.plots.At(i, 2),
+		}
+	}
+	v := struct {
+		Loss  float64 `json:"loss"`
+		Size  int     `json:"size"`
+		I     int     `json:"i"`
+		J     int     `json:"j"`
+		Start int     `json:"start"`
+		End   int     `json:"end"`
+		Plots []xyz   `json:"plots"`
+	}{
+		Loss:  tdp.loss,
+		Size:  tdp.size,
+		I:     tdp.i,
+		J:     tdp.j,
+		Start: tdp.start,
+		End:   tdp.end,
+		Plots: plots,
+	}
+	s, err := json.Marshal(v)
+	return s, err
+}
+
+func (tdp *ThreeDimensionalPlots) UnmarshalJSON(b []byte) error {
+	tdp2 := &struct {
+		Loss  float64 `json:"loss"`
+		Size  int     `json:"size"`
+		I     int     `json:"i"`
+		J     int     `json:"j"`
+		Start int     `json:"start"`
+		End   int     `json:"end"`
+		Plots []xyz   `json:"plots"`
+	}{}
+	err := json.Unmarshal(b, tdp2)
+	tdp.loss = tdp2.Loss
+	tdp.size = tdp2.Size
+	tdp.i = tdp2.I
+	tdp.j = tdp2.J
+	tdp.start = tdp2.Start
+	tdp.end = tdp2.End
+	plots := mat.NewDense(len(tdp2.Plots), 3, nil)
+	for i, v := range tdp2.Plots {
+		plots.SetRow(i, []float64{v.X, v.Y, v.Z})
+	}
+	tdp.plots = plots
+	return err
+}
+
+// loss  float64
+// size  int
+// plots *mat.Dense
+// i, j  int

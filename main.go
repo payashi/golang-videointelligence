@@ -22,6 +22,16 @@ func main() {
 	model.PrintParams(false)
 	tdplots := model.Idenitfy(ar1, ar2)
 	vtrack.Plot(outDir, "3dplots", tdplots)
+
+	// Save on local
+	newFile, err := json.MarshalIndent(tdplots, "", "\t")
+	if err != nil {
+		panic(err)
+	}
+	err = ioutil.WriteFile(fmt.Sprintf("%s/tdplots.json", outDir), newFile, 0644)
+	if err != nil {
+		panic(err)
+	}
 }
 
 func getModel(objName string, ar1, ar2 vtrack.AnnotationResults) *vtrack.Model {
