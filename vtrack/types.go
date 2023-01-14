@@ -20,13 +20,19 @@ type ScreenPlot struct {
 }
 
 type Config struct {
-	Phi1, Phi2, K1, K2 float64
-	C1, C2             mat.VecDense
+	K1, K2 float64
+	C1, C2 mat.VecDense
+}
+type TuneConfig struct {
+	Dp, Mu, Z0 float64
+	Ntrials    int
+	Plots      *SyncedPlots
 }
 
 type Model struct {
-	params *mat.VecDense
-	config Config
+	params  *mat.VecDense
+	config  Config
+	tconfig TuneConfig
 }
 
 type Trajectory struct {
@@ -108,23 +114,27 @@ func (tj *Trajectory) UnmarshalJSON(b []byte) error {
 
 func (m Model) MarshalJSON() ([]byte, error) {
 	v := &struct {
-		Theta1 float64   `json:"theta1"`
-		Theta2 float64   `json:"theta2"`
-		Phi1   float64   `json:"phi1"`
-		Phi2   float64   `json:"phi2"`
-		K1     float64   `json:"k1"`
-		K2     float64   `json:"k2"`
-		C1     []float64 `json:"c1"`
-		C2     []float64 `json:"c2"`
+		Theta1  float64    `json:"theta1"`
+		Theta2  float64    `json:"theta2"`
+		Phi     float64    `json:"phi"`
+		Phi1    float64    `json:"phi1"`
+		Phi2    float64    `json:"phi2"`
+		K1      float64    `json:"k1"`
+		K2      float64    `json:"k2"`
+		C1      []float64  `json:"c1"`
+		C2      []float64  `json:"c2"`
+		TConfig TuneConfig `json:"tconfig"`
 	}{
-		Theta1: m.params.At(0, 0),
-		Theta2: m.params.At(1, 0),
-		Phi1:   m.config.Phi1,
-		Phi2:   m.config.Phi2,
-		K1:     m.config.K1,
-		K2:     m.config.K2,
-		C1:     m.config.C1.RawVector().Data,
-		C2:     m.config.C2.RawVector().Data,
+		Theta1:  m.params.At(0, 0),
+		Theta2:  m.params.At(1, 0),
+		Phi:     m.params.At(2, 0),
+		Phi1:    m.params.At(3, 0),
+		Phi2:    m.params.At(4, 0),
+		K1:      m.config.K1,
+		K2:      m.config.K2,
+		C1:      m.config.C1.RawVector().Data,
+		C2:      m.config.C2.RawVector().Data,
+		TConfig: m.tconfig,
 	}
 	s, err := json.Marshal(v)
 	return s, err
@@ -132,25 +142,29 @@ func (m Model) MarshalJSON() ([]byte, error) {
 
 func (m *Model) UnmarshalJSON(b []byte) error {
 	m2 := &struct {
-		Theta1 float64   `json:"theta1"`
-		Theta2 float64   `json:"theta2"`
-		Phi1   float64   `json:"phi1"`
-		Phi2   float64   `json:"phi2"`
-		K1     float64   `json:"k1"`
-		K2     float64   `json:"k2"`
-		C1     []float64 `json:"c1"`
-		C2     []float64 `json:"c2"`
+		Theta1  float64    `json:"theta1"`
+		Theta2  float64    `json:"theta2"`
+		Phi     float64    `json:"phi"`
+		Phi1    float64    `json:"phi1"`
+		Phi2    float64    `json:"phi2"`
+		K1      float64    `json:"k1"`
+		K2      float64    `json:"k2"`
+		C1      []float64  `json:"c1"`
+		C2      []float64  `json:"c2"`
+		TConfig TuneConfig `json:"tconfig"`
 	}{}
 	err := json.Unmarshal(b, m2)
-	m.params = mat.NewVecDense(2, []float64{m2.Theta1, m2.Theta2})
+	m.params = mat.NewVecDense(5, []float64{
+		m2.Theta1, m2.Theta2,
+		m2.Phi, m2.Phi1, m2.Phi2,
+	})
 	m.config = Config{
-		Phi1: m2.Phi1,
-		Phi2: m2.Phi2,
-		K1:   m2.K1,
-		K2:   m2.K2,
-		C1:   *mat.NewVecDense(3, m2.C1),
-		C2:   *mat.NewVecDense(3, m2.C2),
+		K1: m2.K1,
+		K2: m2.K2,
+		C1: *mat.NewVecDense(3, m2.C1),
+		C2: *mat.NewVecDense(3, m2.C2),
 	}
+	m.tconfig = m2.TConfig
 	return err
 }
 
@@ -212,8 +226,3 @@ func (tdp *ThreeDimensionalPlots) UnmarshalJSON(b []byte) error {
 	tdp.plots = plots
 	return err
 }
-
-// loss  float64
-// size  int
-// plots *mat.Dense
-// i, j  int
