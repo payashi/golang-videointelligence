@@ -37,9 +37,9 @@ func PlotScreen(outDir, fileName string, tjs []Series) {
 	p := plot.New()
 
 	p.X.Min = -0.5
-	p.Y.Min = -0.5 * ratio
+	p.Y.Min = -0.5 / ratio
 	p.X.Max = +0.5
-	p.Y.Max = +0.5 * ratio
+	p.Y.Max = +0.5 / ratio
 
 	p.Add(plotter.NewGrid())
 
@@ -64,7 +64,7 @@ func PlotScreen(outDir, fileName string, tjs []Series) {
 		p.Legend.Add(fmt.Sprintf("tr-%2d [%03d-%03d]", i, tj.Start, tj.End), ploti)
 	}
 	pwidth := 6 * vg.Inch
-	pheight, _ := vg.ParseLength(fmt.Sprintf("%.2fin", 6*ratio))
+	pheight, _ := vg.ParseLength(fmt.Sprintf("%.2fin", 6/ratio))
 
 	if err := p.Save(pwidth, pheight, fmt.Sprintf("%s/%s.png", outDir, fileName)); err != nil {
 		panic(err)

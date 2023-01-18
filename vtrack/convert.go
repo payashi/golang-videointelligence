@@ -79,25 +79,31 @@ func (cs CameraSystem) Idenitfy(srList1, srList2 []vannotate.Series) []IPlots {
 }
 
 func (cs CameraSystem) join(sr1, sr2 vannotate.Series) (IPlots, error) {
+	ret := IPlots{}
+	ret.sr1, ret.sr2 = sr1, sr2
+	ret.Start = minInt(sr1.Start, sr2.Start)
+	ret.End = maxInt(sr1.End, sr2.End)
+
 	plots, err := NewSyncedPlots(sr1, sr2)
 	if err != nil {
-		return &mat.Dense{}, .0, err
+		return ret, err
 	}
 
-	m1, m2 := cs.project(cs.params, plots)
-	ret := mat.NewDense(plots.size, 3, nil)
-	ret.Add(m1, m2)
-	ret.Scale(0.5, ret)
+	m1 := cs.project(cs.params, 0, sr1.Plots)
+	m2 := cs.project(cs.params, 1, sr2.Plots)
+
+	ret.Plots.Add(m1, m2)
+	ret.Plots.Scale(0.5, ret.Plots)
 
 	diff := mat.NewDense(plots.size, 3, nil)
 	diff.Sub(m1, m2)
-	loss := .0
+	ret.Loss = .0
 	for i := 0; i < plots.size; i++ {
-		loss += mat.NewVecDense(3, diff.RawRowView(i)).Norm(2)
+		ret.Loss += mat.NewVecDense(3, diff.RawRowView(i)).Norm(2)
 	}
-	loss /= float64(plots.size)
+	ret.Loss /= float64(plots.size)
 
-	return ret, loss, nil
+	return ret, nil
 }
 
 func contains(s []int, t int) bool {
