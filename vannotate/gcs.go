@@ -104,7 +104,6 @@ func loadFromGCS(bucketName string, objName string) []Series {
 				0.5 - float64(box.Top),
 			}
 		}
-		// tj.Plots = tj.Plots[tj.Start : tj.End+1]
 	}
 	return ret
 }

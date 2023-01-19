@@ -25,7 +25,7 @@ type Config struct {
 type TuneConfig struct {
 	Dp, Mu, Z0 float64
 	Ntrials    int
-	plots      *splots
+	Plots      *splots
 }
 
 type CameraSystem struct {
@@ -70,25 +70,17 @@ func (cs *CameraSystem) Tune(tconfig TuneConfig) {
 	}
 }
 
-func (cs CameraSystem) Plot(outDir, fileName string, srLists ...[]vannotate.Series) {
-	p := plot.New()
-
-	pl1 := []vannotate.ScreenPlot{
-		{P: -0.5, Q: -0.5 / cs.config.R1}, // bottom left
-		{P: +0.5, Q: -0.5 / cs.config.R1}, // bottom right
-		{P: +0.5, Q: 0.},                  // mid right
-		{P: -0.5, Q: 0.},                  // mid left
-	}
-	pl2 := []vannotate.ScreenPlot{
-		{P: -0.5, Q: -0.5 / cs.config.R2}, // bottom left
-		{P: +0.5, Q: -0.5 / cs.config.R2}, // bottom right
-		{P: +0.5, Q: 0.},                  // mid right
-		{P: -0.5, Q: 0.},                  // mid left
+func (cs CameraSystem) plotFrame(p *plot.Plot) {
+	frame := []vannotate.ScreenPlot{
+		{P: -0.5, Q: -0.5}, // bottom left
+		{P: +0.5, Q: -0.5}, // bottom right
+		{P: +0.5, Q: 0.},   // mid right
+		{P: -0.5, Q: 0.},   // mid left
 	}
 
 	// Plot lower part of frame of each camera
-	fm1 := cs.project(cs.params, 0, pl1)
-	fm2 := cs.project(cs.params, 1, pl2)
+	fm1 := cs.project(cs.params, 0, frame)
+	fm2 := cs.project(cs.params, 1, frame)
 	for i := 0; i < 4; i++ {
 		ni := (i + 1) % 4
 		ploti1, err := plotter.NewLine(plotter.XYs{
@@ -129,6 +121,43 @@ func (cs CameraSystem) Plot(outDir, fileName string, srLists ...[]vannotate.Seri
 		panic(err)
 	}
 	p.Add(scatter)
+}
+
+func (cs CameraSystem) PlotJoined(filePath string, iplots []IPlots) {
+	p := plot.New()
+	cs.plotFrame(p)
+	for i, iplot := range iplots {
+		fmt.Printf("sr1: [%d, %d], sr2: [%d, %d], iplot: [%d, %d]\n",
+			iplot.sr1.Start, iplot.sr1.End,
+			iplot.sr2.Start, iplot.sr2.End,
+			iplot.Start, iplot.End,
+		)
+		for j := 0; j < iplot.Size-1; j++ {
+			ploti, err := plotter.NewLine(plotter.XYs{
+				{X: iplot.Plots.At(j, 0), Y: iplot.Plots.At(j, 1)},
+				{X: iplot.Plots.At(j+1, 0), Y: iplot.Plots.At(j+1, 1)},
+			})
+			if err != nil {
+				panic(err)
+			}
+			ploti.Color = plotutil.Color(i)
+			p.Add(ploti)
+		}
+	}
+	p.Add(plotter.NewGrid())
+	p.X.Max = 15
+	p.X.Min = 0
+	p.Y.Max = 10
+	p.Y.Min = -30
+
+	if err := p.Save(vg.Inch*30, vg.Inch*30, filePath); err != nil {
+		panic(err)
+	}
+}
+
+func (cs CameraSystem) Plot(filePath string, srLists ...[]vannotate.Series) {
+	p := plot.New()
+	cs.plotFrame(p)
 
 	for cami := 0; cami <= 1; cami++ {
 		for _, sr := range srLists[cami] {
@@ -151,19 +180,19 @@ func (cs CameraSystem) Plot(outDir, fileName string, srLists ...[]vannotate.Seri
 	}
 
 	p.Add(plotter.NewGrid())
-	// p.X.Max = 10
-	// p.X.Min = 0
-	// p.Y.Max = 0
-	// p.Y.Min = -20
+	p.X.Max = 15
+	p.X.Min = 0
+	p.Y.Max = 10
+	p.Y.Min = -30
 
-	if err := p.Save(vg.Inch*30, vg.Inch*30, fmt.Sprintf("%s/%s.png", outDir, fileName)); err != nil {
+	if err := p.Save(vg.Inch*30, vg.Inch*30, filePath); err != nil {
 		panic(err)
 	}
 }
 
-func (m CameraSystem) PrintUnityParams() {
-	theta1, theta2 := m.params.At(0, 0), m.params.At(1, 0)
-	phi1, phi2 := m.params.At(3, 0), m.params.At(4, 0)
+func (cs CameraSystem) PrintUnityParams() {
+	theta1, theta2 := cs.params.At(0, 0), cs.params.At(1, 0)
+	phi1, phi2 := cs.params.At(3, 0), cs.params.At(4, 0)
 	toDegree := 180 / math.Pi
 	theta1 *= toDegree
 	theta2 *= toDegree
@@ -173,9 +202,9 @@ func (m CameraSystem) PrintUnityParams() {
 	// Camera1
 	fmt.Println("Camera1:")
 	fmt.Printf("\tPosition: [%0.4f, %0.4f, %0.4f]\n",
-		m.config.C1.At(0, 0),
-		m.config.C1.At(2, 0),
-		m.config.C1.At(1, 0),
+		cs.config.C1.At(0, 0),
+		cs.config.C1.At(2, 0),
+		cs.config.C1.At(1, 0),
 	)
 	fmt.Printf("\tRotation: [%0.4f°, %0.4f°, %0.4f°]\n",
 		-theta1,
@@ -183,17 +212,17 @@ func (m CameraSystem) PrintUnityParams() {
 		0.,
 	)
 	fmt.Printf("\tVertical FOV: %0.4f°\n",
-		math.Atan(m.config.K1/2/m.config.R1)*2*toDegree,
+		math.Atan(cs.config.K1/2/cs.config.R1)*2*toDegree,
 	)
 	fmt.Printf("\tAspect Ratio: %0.4f : 1\n",
-		m.config.R1,
+		cs.config.R1,
 	)
 	// Camera2
 	fmt.Println("Camera2:")
 	fmt.Printf("\tPosition: [%0.4f, %0.4f, %0.4f]\n",
-		m.config.C2.At(0, 0),
-		m.config.C2.At(2, 0),
-		m.config.C2.At(1, 0),
+		cs.config.C2.At(0, 0),
+		cs.config.C2.At(2, 0),
+		cs.config.C2.At(1, 0),
 	)
 	fmt.Printf("\tRotation: [%0.4f°, %0.4f°, %0.4f°]\n",
 		-theta2,
@@ -201,10 +230,10 @@ func (m CameraSystem) PrintUnityParams() {
 		0.,
 	)
 	fmt.Printf("\tVertical FOV: %0.4f°\n",
-		math.Atan(m.config.K2/2/m.config.R2)*2*toDegree,
+		math.Atan(cs.config.K2/2/cs.config.R2)*2*toDegree,
 	)
 	fmt.Printf("\tAspect Ratio: %0.4f : 1\n",
-		m.config.R2,
+		cs.config.R2,
 	)
 }
 
@@ -223,11 +252,11 @@ func (cs CameraSystem) getPointsDistance(params *mat.VecDense) float64 {
 	params.SetVec(3, phi1)
 	params.SetVec(4, phi2)
 
-	m1 := cs.project(params, 0, cs.tconfig.plots.pl1)
-	m2 := cs.project(params, 1, cs.tconfig.plots.pl2)
+	m1 := cs.project(params, 0, cs.tconfig.Plots.pl1)
+	m2 := cs.project(params, 1, cs.tconfig.Plots.pl2)
 
 	sum := .0
-	for i := 0; i < cs.tconfig.plots.size; i++ {
+	for i := 0; i < cs.tconfig.Plots.size; i++ {
 		d := mat.NewVecDense(3, nil)
 		d.SubVec(m1.RowView(i), m2.RowView(i))
 		sum += d.Norm(2)
@@ -237,7 +266,7 @@ func (cs CameraSystem) getPointsDistance(params *mat.VecDense) float64 {
 
 func (cs *CameraSystem) getPhis(params *mat.VecDense) (float64, float64) {
 	// Get 2D plots
-	plots := cs.tconfig.plots
+	plots := cs.tconfig.Plots
 	pl1 := []vannotate.ScreenPlot{plots.pl1[0], plots.pl1[plots.size-1]}
 	pl2 := []vannotate.ScreenPlot{plots.pl2[0], plots.pl2[plots.size-1]}
 	m1 := cs.project(cs.params, 0, pl1)
@@ -332,7 +361,7 @@ func (cs CameraSystem) MarshalJSON() ([]byte, error) {
 }
 
 func (cs *CameraSystem) UnmarshalJSON(b []byte) error {
-	m2 := &struct {
+	cs2 := &struct {
 		Theta1  float64    `json:"theta1"`
 		Theta2  float64    `json:"theta2"`
 		Phi     float64    `json:"phi"`
@@ -346,52 +375,37 @@ func (cs *CameraSystem) UnmarshalJSON(b []byte) error {
 		C2      []float64  `json:"c2"`
 		TConfig TuneConfig `json:"tconfig"`
 	}{}
-	err := json.Unmarshal(b, m2)
+	err := json.Unmarshal(b, cs2)
 	cs.params = mat.NewVecDense(5, []float64{
-		m2.Theta1, m2.Theta2,
-		m2.Phi, m2.Phi1, m2.Phi2,
+		cs2.Theta1, cs2.Theta2,
+		cs2.Phi, cs2.Phi1, cs2.Phi2,
 	})
 	cs.config = Config{
-		K1: m2.K1,
-		K2: m2.K2,
-		R1: m2.R1,
-		R2: m2.R2,
-		C1: *mat.NewVecDense(3, m2.C1),
-		C2: *mat.NewVecDense(3, m2.C2),
+		K1: cs2.K1,
+		K2: cs2.K2,
+		R1: cs2.R1,
+		R2: cs2.R2,
+		C1: *mat.NewVecDense(3, cs2.C1),
+		C2: *mat.NewVecDense(3, cs2.C2),
 	}
-	cs.tconfig = m2.TConfig
+	cs.tconfig = cs2.TConfig
 	return err
 }
 
-func GetCameraSystem(outDir, fileName string, sr1, sr2 vannotate.Series, config Config, tconfig TuneConfig) *CameraSystem {
-	filePath := fmt.Sprintf("%s/%s.json", outDir, fileName)
-	// If file is found, read and unmarshal it
-	if file, err := os.Open(filePath); err == nil {
-		defer file.Close()
-		b, err := ioutil.ReadAll(file)
-		if err != nil {
-			panic(err)
-		}
-		var ret CameraSystem
-		if err := json.Unmarshal(b, &ret); err != nil {
-			panic(err)
-		}
-		return &ret
-	} else {
-		fmt.Printf("Tuning %s...\n", fileName)
-		plots, _ := NewSyncedPlots(sr1, sr2)
-		tconfig.plots = plots
-
-		ret := NewCameraSystem(config)
-		ret.Tune(tconfig)
-		ret.Plot(outDir, "after", []vannotate.Series{sr1}, []vannotate.Series{sr2})
-
-		// Save on local
-		newFile, err := json.MarshalIndent(ret, "", "\t")
-		if err != nil {
-			panic(err)
-		}
-		_ = ioutil.WriteFile(filePath, newFile, 0644)
-		return ret
+func LoadCameraSystem(filePath string) (*CameraSystem, error) {
+	file, err := os.Open(filePath)
+	cs := &CameraSystem{}
+	if err != nil {
+		return cs, err
 	}
+
+	defer file.Close()
+	b, err := ioutil.ReadAll(file)
+	if err != nil {
+		panic(err)
+	}
+	if err := json.Unmarshal(b, cs); err != nil {
+		panic(err)
+	}
+	return cs, nil
 }

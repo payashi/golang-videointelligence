@@ -1,6 +1,10 @@
 package main
 
 import (
+	"encoding/json"
+	"fmt"
+	"os"
+
 	"github.com/payashi/vannotate"
 	"github.com/payashi/vtrack"
 	"gonum.org/v1/gonum/mat"
@@ -24,10 +28,9 @@ var config = vtrack.Config{
 
 var tconfig = vtrack.TuneConfig{
 	Ntrials: 100000,
-	// Ntrials: 0,
-	Dp: 1e-2,
-	Mu: 1e-2,
-	Z0: 1.7,
+	Dp:      1e-2,
+	Mu:      1e-2,
+	Z0:      1.7,
 }
 
 func main() {
@@ -35,21 +38,39 @@ func main() {
 	srList1 := vannotate.GetSeries(outDir, bucketName, objName1)
 	srList2 := vannotate.GetSeries(outDir, bucketName, objName2)
 
-	// TODO: Implement LoadCameraSystem(outDir, fileName) and file existence check should be done on main
-	cs := vtrack.GetCameraSystem(outDir, "camsys", srList1[4], srList2[19], config, tconfig)
+	filePath := fmt.Sprintf("%s/%s.json", outDir, "camsys")
+	cs, err := vtrack.LoadCameraSystem(filePath)
+	if err != nil {
+		fmt.Printf("Tuning the Camera System...\n")
+		sr1, sr2 := srList1[4], srList2[19]
+		plots, _ := vtrack.NewSyncedPlots(sr1, sr2)
+		tconfig.Plots = plots
+
+		cs = vtrack.NewCameraSystem(config)
+		cs.Tune(tconfig)
+		// cs.Plot(outDir, "after", []vannotate.Series{sr1}, []vannotate.Series{sr2})
+
+		// Save on local
+		newFile, err := json.MarshalIndent(cs, "", "\t")
+		if err != nil {
+			panic(err)
+		}
+		_ = os.WriteFile(filePath, newFile, 0644)
+	}
+
 	cs.PrintUnityParams()
-	cs.Plot(outDir, "tdplots", srList1, srList2)
-	// vtrack.Plot(outDir, "tdplots", tdplots)
-	// ipList := cs.Idenitfy(srList1, srList2)
-	// cs.Plot(outDir, "model", )
+	cs.Plot(fmt.Sprintf("%s/%s.png", outDir, "iplots"), srList1, srList2)
+
+	ipList := cs.Idenitfy(srList1, srList2)
+	cs.PlotJoined(fmt.Sprintf("%s/%s.png", outDir, "joined"), ipList[:3])
 
 	// Save on local
-	// newFile, err := json.MarshalIndent(ipList, "", "\t")
-	// if err != nil {
-	// 	panic(err)
-	// }
-	// err = ioutil.WriteFile(fmt.Sprintf("%s/tdplots.json", outDir), newFile, 0644)
-	// if err != nil {
-	// 	panic(err)
-	// }
+	newFile, err := json.MarshalIndent(ipList, "", "\t")
+	if err != nil {
+		panic(err)
+	}
+	err = os.WriteFile(fmt.Sprintf("%s/iplots.json", outDir), newFile, 0644)
+	if err != nil {
+		panic(err)
+	}
 }

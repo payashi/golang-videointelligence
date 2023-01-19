@@ -1,6 +1,7 @@
 package vtrack
 
 import (
+	"errors"
 	"math"
 	"sort"
 
@@ -29,7 +30,7 @@ func (cs CameraSystem) Idenitfy(srList1, srList2 []vannotate.Series) []IPlots {
 	}
 	for i, sr1 := range srList1 {
 		for j, sr2 := range srList2 {
-			ip, err := cs.join(sr1, sr2)
+			ip, err := cs.newIplots(sr1, sr2)
 			ip.i = i
 			ip.j = j
 			if err != nil {
@@ -78,30 +79,48 @@ func (cs CameraSystem) Idenitfy(srList1, srList2 []vannotate.Series) []IPlots {
 	return ret
 }
 
-func (cs CameraSystem) join(sr1, sr2 vannotate.Series) (IPlots, error) {
+func (cs CameraSystem) newIplots(sr1, sr2 vannotate.Series) (IPlots, error) {
+	m1 := cs.project(cs.params, 0, sr1.Plots)
+	m2 := cs.project(cs.params, 1, sr2.Plots)
+	// overwrapped range
+	start, end := maxInt(sr1.Start, sr2.Start), minInt(sr1.End, sr2.End)
+	if start > end {
+		return IPlots{}, errors.New("no overwrapped range")
+	}
+
 	ret := IPlots{}
 	ret.sr1, ret.sr2 = sr1, sr2
 	ret.Start = minInt(sr1.Start, sr2.Start)
 	ret.End = maxInt(sr1.End, sr2.End)
+	ret.Size = ret.End - ret.Start + 1
 
-	plots, err := NewSyncedPlots(sr1, sr2)
-	if err != nil {
-		return ret, err
-	}
-
-	m1 := cs.project(cs.params, 0, sr1.Plots)
-	m2 := cs.project(cs.params, 1, sr2.Plots)
-
-	ret.Plots.Add(m1, m2)
-	ret.Plots.Scale(0.5, ret.Plots)
-
-	diff := mat.NewDense(plots.size, 3, nil)
-	diff.Sub(m1, m2)
+	// Calculate loss
 	ret.Loss = .0
-	for i := 0; i < plots.size; i++ {
-		ret.Loss += mat.NewVecDense(3, diff.RawRowView(i)).Norm(2)
+	for t := start; t <= end; t++ {
+		diff := mat.NewVecDense(3, nil)
+		diff.SubVec(m1.RowView(t), m2.RowView(t))
+		ret.Loss += diff.Norm(2)
 	}
-	ret.Loss /= float64(plots.size)
+	ret.Loss /= float64(end - start + 1)
+
+	ret.Plots = mat.NewDense(ret.Size, 3, nil)
+	for t := ret.Start; t <= ret.End; t++ {
+		// p1, p2 := sr1.Plots[t], sr2.Plots[t]
+		in1 := sr1.Start <= t && t <= sr1.End
+		in2 := sr2.Start <= t && t <= sr2.End
+		p := mat.NewVecDense(3, nil)
+		if in1 && in2 {
+			p.AddVec(m1.RowView(t), m2.RowView(t))
+			p.ScaleVec(0.5, p)
+			ret.Plots.SetRow(t-ret.Start, p.RawVector().Data)
+		} else if in1 {
+			ret.Plots.SetRow(t-ret.Start, m1.RawRowView(t))
+		} else if in2 {
+			ret.Plots.SetRow(t-ret.Start, m2.RawRowView(t))
+		} else {
+			panic("invalid timestamp")
+		}
+	}
 
 	return ret, nil
 }
