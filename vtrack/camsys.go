@@ -127,11 +127,6 @@ func (cs CameraSystem) PlotJoined(filePath string, iplots []IPlots) {
 	p := plot.New()
 	cs.plotFrame(p)
 	for i, iplot := range iplots {
-		fmt.Printf("sr1: [%d, %d], sr2: [%d, %d], iplot: [%d, %d]\n",
-			iplot.sr1.Start, iplot.sr1.End,
-			iplot.sr2.Start, iplot.sr2.End,
-			iplot.Start, iplot.End,
-		)
 		for j := 0; j < iplot.Size-1; j++ {
 			ploti, err := plotter.NewLine(plotter.XYs{
 				{X: iplot.Plots.At(j, 0), Y: iplot.Plots.At(j, 1)},

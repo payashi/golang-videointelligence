@@ -21,11 +21,11 @@ func (ip *IPlots) UnmarshalJSON(b []byte) error {
 	ip2 := &struct {
 		Loss  float64     `json:"loss"`
 		Size  int         `json:"size"`
-		Plots [][]float64 `json:"plots"`
 		Start int         `json:"start"`
 		End   int         `json:"end"`
 		I     int         `json:"i"`
 		J     int         `json:"j"`
+		Plots [][]float64 `json:"plots"`
 	}{}
 	err := json.Unmarshal(b, ip2)
 	ip.Loss = ip2.Loss
@@ -34,6 +34,10 @@ func (ip *IPlots) UnmarshalJSON(b []byte) error {
 	ip.End = ip2.End
 	ip.i = ip2.I
 	ip.j = ip2.J
+	ip.Plots = mat.NewDense(len(ip2.Plots), 3, nil)
+	for i := 0; i < len(ip2.Plots); i++ {
+		ip.Plots.SetRow(i, ip2.Plots[i])
+	}
 	return err
 }
 
@@ -49,19 +53,19 @@ func (ip IPlots) MarshalJSON() ([]byte, error) {
 	v := &struct {
 		Loss  float64     `json:"loss"`
 		Size  int         `json:"size"`
-		Plots [][]float64 `json:"plots"`
 		Start int         `json:"start"`
 		End   int         `json:"end"`
 		I     int         `json:"i"`
 		J     int         `json:"j"`
+		Plots [][]float64 `json:"plots"`
 	}{
 		Loss:  ip.Loss,
 		Size:  ip.Size,
-		Plots: plots,
 		Start: ip.Start,
 		End:   ip.End,
 		I:     ip.i,
 		J:     ip.j,
+		Plots: plots,
 	}
 	s, err := json.Marshal(v)
 	return s, err
