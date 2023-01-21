@@ -12,7 +12,7 @@ import (
 func (cs CameraSystem) Idenitfy(srList1, srList2 []vannotate.Series) []IPlots {
 	n1, n2 := len(srList1), len(srList2)
 	const MaxLoss float64 = 30
-	const MinDist float64 = 10.
+
 	tdps := make([][]IPlots, n1)
 	for i := 0; i < n1; i++ {
 		tdps[i] = make([]IPlots, n2)
@@ -39,11 +39,6 @@ func (cs CameraSystem) Idenitfy(srList1, srList2 []vannotate.Series) []IPlots {
 			if ip.Loss > MaxLoss {
 				continue
 			}
-			path := mat.NewVecDense(3, nil)
-			path.SubVec(ip.Plots.RowView(ip.Size-1), ip.Plots.RowView(0))
-			if path.Norm(2) < MinDist {
-				continue
-			}
 			tdps[i][j] = ip
 		}
 	}
@@ -52,11 +47,11 @@ func (cs CameraSystem) Idenitfy(srList1, srList2 []vannotate.Series) []IPlots {
 	usedjs := make([]int, 0)
 	for {
 		argmini, argminj := -1, -1
+		best := math.Inf(1)
 		for i := 0; i < n1; i++ {
 			if contains(usedis, i) {
 				continue
 			}
-			best := math.Inf(1)
 			for j := 0; j < n2; j++ {
 				if contains(usedjs, j) {
 					continue

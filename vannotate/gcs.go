@@ -8,6 +8,7 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	"sort"
 
 	"cloud.google.com/go/storage"
 	video "cloud.google.com/go/videointelligence/apiv1"
@@ -105,6 +106,7 @@ func loadFromGCS(bucketName string, objName string) []Series {
 			}
 		}
 	}
+	sort.Slice(ret, func(i, j int) bool { return ret[i].Conf > ret[j].Conf })
 	return ret
 }
 

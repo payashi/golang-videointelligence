@@ -42,13 +42,13 @@ func main() {
 	cs, err := vtrack.LoadCameraSystem(filePath)
 	if err != nil {
 		fmt.Printf("Tuning the Camera System...\n")
-		sr1, sr2 := srList1[4], srList2[19]
+		sr1, sr2 := srList1[0], srList2[0]
 		plots, _ := vtrack.NewSyncedPlots(sr1, sr2)
 		tconfig.Plots = plots
 
 		cs = vtrack.NewCameraSystem(config)
 		cs.Tune(tconfig)
-		// cs.Plot(outDir, "after", []vannotate.Series{sr1}, []vannotate.Series{sr2})
+		// cs.Plot(fmt.Sprintf("%s/%s", outDir, "after"), []vannotate.Series{sr1}, []vannotate.Series{sr2})
 
 		// Save on local
 		newFile, err := json.MarshalIndent(cs, "", "\t")

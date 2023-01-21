@@ -20,19 +20,19 @@ type Series struct {
 	Plots      []ScreenPlot
 }
 
-func (tj Series) Len() float64 {
+func (sr Series) Len() float64 {
 	ret := .0
-	for i := tj.Start; i < tj.End; i++ {
-		cp, cq := tj.Plots[i].P, tj.Plots[i].Q
-		np, nq := tj.Plots[i+1].P, tj.Plots[i+1].Q
+	for i := sr.Start; i < sr.End; i++ {
+		cp, cq := sr.Plots[i].P, sr.Plots[i].Q
+		np, nq := sr.Plots[i+1].P, sr.Plots[i+1].Q
 		dist := math.Sqrt((np-cp)*(np-cp) + (nq-cq)*(nq-cq))
 		ret += dist
 	}
 	return ret
 }
 
-func PlotScreen(outDir, fileName string, tjs []Series) {
-	const minConf float32 = 0.4
+func PlotScreen(outDir, fileName string, srList []Series) {
+	const minConf float32 = 0.2
 	const ratio float64 = 16. / 9. // aspect ratio
 	p := plot.New()
 
@@ -43,12 +43,12 @@ func PlotScreen(outDir, fileName string, tjs []Series) {
 
 	p.Add(plotter.NewGrid())
 
-	for i, tj := range tjs {
-		if tj.Conf < minConf {
+	for i, sr := range srList {
+		if sr.Conf < minConf {
 			continue
 		}
-		plots := make(plotter.XYs, len(tj.Plots))
-		for i, v := range tj.Plots {
+		plots := make(plotter.XYs, len(sr.Plots))
+		for i, v := range sr.Plots {
 			plots[i].X = v.P
 			plots[i].Y = v.Q
 		}
@@ -61,7 +61,7 @@ func PlotScreen(outDir, fileName string, tjs []Series) {
 		ploti.GlyphStyle.Radius = 2
 		p.Add(ploti)
 
-		p.Legend.Add(fmt.Sprintf("tr-%2d [%03d-%03d]", i, tj.Start, tj.End), ploti)
+		p.Legend.Add(fmt.Sprintf("tr-%2d [%03d-%03d]", i, sr.Start, sr.End), ploti)
 	}
 	pwidth := 6 * vg.Inch
 	pheight, _ := vg.ParseLength(fmt.Sprintf("%.2fin", 6/ratio))
