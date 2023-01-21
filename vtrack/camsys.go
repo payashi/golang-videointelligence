@@ -176,10 +176,10 @@ func (cs CameraSystem) Plot(filePath string, srLists ...[]vannotate.Series) {
 	}
 
 	p.Add(plotter.NewGrid())
-	p.X.Max = 15
-	p.X.Min = 0
-	p.Y.Max = 10
-	p.Y.Min = -30
+	p.X.Max = -5
+	p.X.Min = +20
+	p.Y.Max = +5
+	p.Y.Min = -20
 
 	if err := p.Save(vg.Inch*30, vg.Inch*30, filePath); err != nil {
 		panic(err)

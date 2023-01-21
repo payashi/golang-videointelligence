@@ -48,7 +48,7 @@ func main() {
 
 		cs = vtrack.NewCameraSystem(config)
 		cs.Tune(tconfig)
-		// cs.Plot(fmt.Sprintf("%s/%s", outDir, "after"), []vannotate.Series{sr1}, []vannotate.Series{sr2})
+		// cs.Plot(fmt.Sprintf("%s/%s", outDir, "after.png"), []vannotate.Series{sr1}, []vannotate.Series{sr2})
 
 		// Save on local
 		newFile, err := json.MarshalIndent(cs, "", "\t")
